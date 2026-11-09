@@ -45,12 +45,29 @@
   .notes li{margin-bottom:6px}
   #err{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--warn) 15%,transparent);border:1px solid color-mix(in srgb,var(--warn) 50%,transparent);color:var(--warn);font-size:13px}
   /* Pantalla de juego */
-  #play{display:none;position:fixed;inset:0;background:#000;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-  #bar{flex:none;display:flex;align-items:center;gap:10px;padding:8px 10px;background:#0b0c15;border-bottom:1px solid #1d2035}
-  #bar button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:10px;padding:8px 12px;font:600 13px Inter,sans-serif;cursor:pointer}
-  #title{flex:1;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #wrap{flex:1;min-height:0;position:relative}
+  #play{display:none;position:fixed;inset:0;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  #stage{position:absolute;top:env(safe-area-inset-top);right:env(safe-area-inset-right);bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left)}
   #game{position:absolute;inset:0}
+  /* La imagen del juego se coloca en el rectángulo calculado, con su proporción real */
+  #game .ejs_canvas{position:absolute!important;left:var(--sx)!important;top:var(--sy)!important;width:var(--sw)!important;height:var(--sh)!important}
+  /* Sustituimos el mando táctil de EmulatorJS por el nuestro */
+  #game .ejs_virtualGamepad_parent,#game .ejs_virtualGamepad_open{display:none!important}
+  #pad{position:absolute;inset:0;pointer-events:none;z-index:5;--acc:#7b5cff}
+  #pad.nds{--acc:#19c3a6}
+  #pad > *{position:absolute;pointer-events:auto;touch-action:none}
+  .vb{display:grid;place-items:center;color:rgba(255,255,255,.85);background:rgba(255,255,255,.10);border:1.5px solid rgba(255,255,255,.28);font:800 18px Inter,sans-serif;transition:background .06s,transform .06s}
+  .vb.on{background:color-mix(in srgb,var(--acc) 70%,transparent);border-color:var(--acc);color:#fff;transform:scale(.94)}
+  .sh{border-radius:12px;width:74px;height:40px}
+  .pill{border-radius:20px;height:34px;padding:0 14px;font:600 13px Inter,sans-serif}
+  .ic{border-radius:50%;width:40px;height:40px;font-size:16px;padding:0}
+  #bBack.armed{background:rgba(255,90,90,.45);border-color:#ff7a7a;width:auto;border-radius:20px;padding:0 12px;font-size:12px}
+  #dpad svg{width:100%;height:100%;display:block;overflow:visible}
+  #dpad .arm{fill:rgba(255,255,255,.12);stroke:rgba(255,255,255,.3);stroke-width:1.5}
+  #dpad .lit{fill:var(--acc);opacity:0;transition:opacity .05s}
+  #dpad .lit.on{opacity:.75}
+  #face .fb{position:absolute;border-radius:50%;font-size:22px}
+  #toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:6;background:rgba(0,0,0,.75);color:#fff;font:600 12px Inter,sans-serif;padding:7px 12px;border-radius:14px;pointer-events:none;opacity:0;transition:opacity .3s}
+  #toast.show{opacity:1}
 </style>
 </head>
 <body>
@@ -102,11 +119,30 @@
 </section>
 
 <section id="play">
-  <div id="bar">
-    <button id="back">← Cambiar juego</button>
-    <div id="title"></div>
+  <div id="stage">
+    <div id="game"></div>
+    <div id="pad">
+      <div class="vb sh" id="bL" data-k="10">L</div>
+      <div class="vb sh" id="bR" data-k="11">R</div>
+      <div id="dpad">
+        <svg viewBox="0 0 150 150">
+          <path class="arm" d="M52 8h46a6 6 0 0 1 6 6v38h38a6 6 0 0 1 6 6v34a6 6 0 0 1-6 6h-38v38a6 6 0 0 1-6 6H52a6 6 0 0 1-6-6V98H8a6 6 0 0 1-6-6V58a6 6 0 0 1 6-6h38V14a6 6 0 0 1 6-6z"/>
+          <rect class="lit" data-d="u" x="52" y="10" width="46" height="42" rx="5"/>
+          <rect class="lit" data-d="d" x="52" y="98" width="46" height="42" rx="5"/>
+          <rect class="lit" data-d="l" x="4" y="58" width="42" height="34" rx="5"/>
+          <rect class="lit" data-d="r" x="104" y="58" width="42" height="34" rx="5"/>
+          <path d="M75 20l10 13H65zM75 130l10-13H65zM15 75l13-10v20zM135 75l-13-10v20z" fill="rgba(255,255,255,.55)"/>
+        </svg>
+      </div>
+      <div id="face"></div>
+      <div class="vb pill" id="bSel" data-k="2">Select</div>
+      <div class="vb pill" id="bSta" data-k="3">Start</div>
+      <div class="vb ic" id="bFF" title="Avance rápido">»</div>
+      <div class="vb ic" id="bMenu" title="Menú">☰</div>
+      <div class="vb ic" id="bBack" title="Cambiar juego">←</div>
+    </div>
+    <div id="toast"></div>
   </div>
-  <div id="wrap"><div id="game"></div></div>
 </section>
 
 <input type="file" id="file" hidden>
@@ -185,8 +221,8 @@
     var core = sys==="gba" ? "mgba" : dsCore;
     var name = file.name.replace(/\.[^.]+$/,"");
     document.getElementById("home").style.display="none";
-    document.getElementById("play").style.display="flex";
-    document.getElementById("title").textContent = name + " · " + (sys==="gba" ? "GBA" : "NDS");
+    document.getElementById("play").style.display="block";
+    setupPad(sys, core);
 
     window.EJS_player = "#game";
     window.EJS_core = core;
@@ -203,13 +239,194 @@
     window.EJS_backgroundColor = "#000";
     window.EJS_Buttons = { netplay:false };
     window.EJS_defaultOptions = { "save-state-location": "browser" };
+    window.EJS_onGameStart = function(){ gameStarted = true; applyDsLayout(); layout(); };
 
     var s = document.createElement("script");
     s.src = "data/loader.js";
     document.body.appendChild(s);
   }
 
-  document.getElementById("back").addEventListener("click", function(){ location.reload(); });
+  /* ---------- Mando táctil propio y disposición vertical/horizontal ---------- */
+  var gameStarted = false, SYS = "gba", CORE = "mgba", landscape = false;
+  var stage = document.getElementById("stage"), game = document.getElementById("game"), pad = document.getElementById("pad");
+  var el = function(id){ return document.getElementById(id); };
+
+  function gm(){ return window.EJS_emulator && window.EJS_emulator.gameManager; }
+  function key(k, v){ var g = gm(); if (g) try { g.simulateInput(0, k, v); } catch(e){} }
+
+  function toast(msg){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");},1600); }
+
+  // Proporción de la imagen: GBA 3:2; DS dos pantallas 256x192 apiladas (2:3) o lado a lado (8:3)
+  function aspect(){ return SYS==="gba" ? 3/2 : (landscape ? 8/3 : 2/3); }
+
+  function applyDsLayout(){
+    if (SYS!=="nds" || !gm()) return;
+    var opt = CORE==="melonds" ? ["melonds_screen_layout", landscape ? "Left/Right" : "Top/Bottom"]
+                               : ["desmume_screens_layout", landscape ? "left/right" : "top/bottom"];
+    try { gm().setVariable(opt[0], opt[1]); } catch(e){}
+  }
+
+  function place(node, r){
+    var st = node.style;
+    ["left","top","right","bottom","width","height"].forEach(function(k){ st[k] = (r[k]==null) ? "" : r[k]+"px"; });
+  }
+
+  function layout(){
+    var W = stage.clientWidth, H = stage.clientHeight;
+    if (!W || !H) return;
+    var wasLand = landscape;
+    landscape = W > H;
+    if (wasLand !== landscape) applyDsLayout();
+    var a = aspect(), sw, sh, sx, sy, m = 10;
+    var face = el("face"), dpad = el("dpad");
+
+    if (!landscape){
+      // Vertical: pantalla arriba a todo el ancho, mandos debajo
+      var maxH = H - 230;                              // deja sitio mínimo para los mandos
+      sw = W; sh = W / a;
+      if (sh > maxH){ sh = Math.max(maxH, H*0.45); sw = sh * a; if (sw > W){ sw = W; sh = W/a; } }
+      sx = (W - sw)/2; sy = 0;
+      var top = sy + sh, ph = H - top;                 // zona de mandos
+      var size = Math.max(112, Math.min(170, ph - 120, W*0.42));
+      var cy = top + 56 + Math.min((ph - 56 - 56)/2, size/2 + 40);             // centro vertical entre la fila L/R y la fila inferior
+      place(el("bL"), {left:m, top:top+8});
+      place(el("bR"), {right:m, top:top+8});
+      place(dpad, {left:m+4, top:cy-size/2, width:size, height:size});
+      place(face, {right:m+4, top:cy-size/2, width:size, height:size});
+      var by = 12;
+      place(el("bBack"), {left:m, bottom:by});
+      place(el("bSel"), {left:W/2-86, bottom:by-3+3});
+      place(el("bSta"), {left:W/2+8, bottom:by});
+      place(el("bFF"), {right:m+48, bottom:by});
+      place(el("bMenu"), {right:m, bottom:by});
+    } else {
+      // Horizontal: pantalla centrada a toda la altura, mandos a los lados
+      var side = Math.max(150, Math.min(210, W*0.2));
+      sw = W - side*2; sh = sw / a;
+      if (sh > H){ sh = H; sw = H*a; }
+      sx = (W - sw)/2; sy = (H - sh)/2;
+      var col = Math.max(side, sx);                    // ancho real de cada lateral
+      var size2 = Math.max(110, Math.min(160, col - 16, H - 130));
+      place(el("bL"), {left:m, top:m});
+      place(el("bMenu"), {left:m+82, top:m});
+      place(el("bR"), {right:m, top:m});
+      place(el("bFF"), {right:m+82, top:m});
+      place(dpad, {left:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
+      place(face, {right:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
+      place(el("bBack"), {left:m, bottom:m});
+      place(el("bSel"), {left:m+48, bottom:m+3});
+      place(el("bSta"), {right:m, bottom:m+3});
+    }
+    // la imagen del juego (canvas de EmulatorJS) ocupa exactamente ese rectángulo
+    game.style.setProperty("--sx", sx+"px"); game.style.setProperty("--sy", sy+"px");
+    game.style.setProperty("--sw", sw+"px"); game.style.setProperty("--sh", sh+"px");
+    layoutFace();
+  }
+
+  // Botones de acción: GBA = A/B en diagonal; DS = rombo X/A/B/Y
+  var faceBtns = [];
+  function buildFace(){
+    var face = el("face"); face.innerHTML = "";
+    var defs = SYS==="gba"
+      ? [{t:"A",k:8,x:.74,y:.36},{t:"B",k:0,x:.26,y:.64}]
+      : [{t:"X",k:9,x:.5,y:.2},{t:"A",k:8,x:.8,y:.5},{t:"B",k:0,x:.5,y:.8},{t:"Y",k:1,x:.2,y:.5}];
+    faceBtns = defs.map(function(d){ var b=document.createElement("div"); b.className="vb fb"; b.textContent=d.t; face.appendChild(b); d.el=b; return d; });
+  }
+  function layoutFace(){
+    var face = el("face"), S = face.clientWidth || 150;
+    var r = SYS==="gba" ? S*0.24 : S*0.19;
+    faceBtns.forEach(function(d){ d.r=r; place(d.el,{left:d.x*S-r, top:d.y*S-r, width:r*2, height:r*2}); });
+  }
+
+  // Cruceta de 8 direcciones (incluye diagonales)
+  var dirKeys = {u:4, d:5, l:6, r:7}, dirState = {u:0,d:0,l:0,r:0};
+  function setDirs(n){
+    ["u","d","l","r"].forEach(function(k){
+      if (dirState[k] !== n[k]){ dirState[k] = n[k]; key(dirKeys[k], n[k]); }
+      var lit = el("dpad").querySelector('.lit[data-d="'+k+'"]'); if (lit) lit.classList.toggle("on", !!n[k]);
+    });
+  }
+  function dirsFrom(e){
+    var rc = el("dpad").getBoundingClientRect();
+    var dx = e.clientX - (rc.left + rc.width/2), dy = e.clientY - (rc.top + rc.height/2);
+    var none = {u:0,d:0,l:0,r:0};
+    if (Math.hypot(dx,dy) < rc.width*0.12) return none;           // zona muerta central
+    var sector = ((Math.round(Math.atan2(dy,dx) / (Math.PI/4)) % 8) + 8) % 8;   // 0=dcha, 1=abajo-dcha, ...
+    var map = [{r:1},{r:1,d:1},{d:1},{d:1,l:1},{l:1},{l:1,u:1},{u:1},{u:1,r:1}][sector];
+    return {u:map.u|0, d:map.d|0, l:map.l|0, r:map.r|0};
+  }
+  function bindDpad(){
+    var d = el("dpad"), id = null;
+    d.addEventListener("pointerdown", function(e){ e.preventDefault(); id=e.pointerId; try{d.setPointerCapture(id);}catch(_){} setDirs(dirsFrom(e)); });
+    d.addEventListener("pointermove", function(e){ if (e.pointerId===id) setDirs(dirsFrom(e)); });
+    var end = function(e){ if (e.pointerId===id){ id=null; setDirs({u:0,d:0,l:0,r:0}); } };
+    d.addEventListener("pointerup", end); d.addEventListener("pointercancel", end);
+  }
+
+  // Botones de acción: se puede deslizar y pulsar dos a la vez tocando entre ellos
+  var facePointers = {}, faceState = {};
+  function faceHits(e){
+    var rc = el("face").getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top, S = rc.width, hit = [], best=null, bd=1e9;
+    faceBtns.forEach(function(b){
+      var dist = Math.hypot(x - b.x*S, y - b.y*S);
+      if (dist < b.r*1.18) hit.push(b.k);
+      if (dist < bd){ bd = dist; best = b; }
+    });
+    if (!hit.length && best && bd < best.r*1.7) hit.push(best.k);
+    return hit;
+  }
+  function syncFace(){
+    var want = {};
+    Object.keys(facePointers).forEach(function(p){ facePointers[p].forEach(function(k){ want[k]=1; }); });
+    faceBtns.forEach(function(b){
+      var v = want[b.k] ? 1 : 0;
+      if ((faceState[b.k]||0) !== v){ faceState[b.k] = v; key(b.k, v); }
+      b.el.classList.toggle("on", !!v);
+    });
+  }
+  function bindFace(){
+    var f = el("face");
+    f.addEventListener("pointerdown", function(e){ e.preventDefault(); try{f.setPointerCapture(e.pointerId);}catch(_){} facePointers[e.pointerId]=faceHits(e); syncFace(); });
+    f.addEventListener("pointermove", function(e){ if (facePointers[e.pointerId]){ facePointers[e.pointerId]=faceHits(e); syncFace(); } });
+    var end = function(e){ delete facePointers[e.pointerId]; syncFace(); };
+    f.addEventListener("pointerup", end); f.addEventListener("pointercancel", end);
+  }
+
+  function bindHold(node){        // L, R, Select, Start
+    var k = +node.dataset.k, n = 0;
+    node.addEventListener("pointerdown", function(e){ e.preventDefault(); try{node.setPointerCapture(e.pointerId);}catch(_){} if(!n++) key(k,1); node.classList.add("on"); });
+    var end = function(){ if (n){ n=0; key(k,0); node.classList.remove("on"); } };
+    node.addEventListener("pointerup", end); node.addEventListener("pointercancel", end);
+  }
+
+  function setupPad(sys, core){
+    SYS = sys; CORE = core;
+    pad.className = sys;
+    buildFace(); bindDpad(); bindFace();
+    ["bL","bR","bSel","bSta"].forEach(function(id){ bindHold(el(id)); });
+    if (sys==="gba") { /* L y R existen en ambas */ }
+
+    var ff = false;
+    el("bFF").addEventListener("pointerdown", function(e){
+      e.preventDefault(); ff = !ff; key(27, ff?1:0);
+      el("bFF").classList.toggle("on", ff); toast(ff ? "Avance rápido activado" : "Velocidad normal");
+    });
+    el("bMenu").addEventListener("pointerdown", function(e){
+      e.preventDefault(); try { window.EJS_emulator.menu.toggle(); } catch(_){}
+    });
+    var armed = false, armT;
+    el("bBack").addEventListener("pointerdown", function(e){
+      e.preventDefault();
+      if (armed){ location.reload(); return; }
+      armed = true; el("bBack").classList.add("armed"); el("bBack").textContent = "¿Salir? toca otra vez";
+      clearTimeout(armT); armT = setTimeout(function(){ armed=false; el("bBack").classList.remove("armed"); el("bBack").textContent="←"; }, 2500);
+    });
+
+    var relayout = function(){ requestAnimationFrame(layout); setTimeout(layout, 350); };
+    window.addEventListener("resize", relayout);
+    window.addEventListener("orientationchange", relayout);
+    layout();
+  }
 })();
 </script>
 </body>
