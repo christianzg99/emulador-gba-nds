@@ -1,9 +1,11 @@
 // Service worker: permite abrir el emulador sin conexión.
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
-const VERSION = "emu-0eaf7b2fba";
+const VERSION = "emu-6c2e41cb30";
 const FILES = [
   "./",
   "index.html",
+  "app.css",
+  "app.js",
   "data/loader.js",
   "data/emulator.min.js",
   "data/emulator.min.css",
@@ -43,16 +45,16 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  // La página principal: primero internet (para coger cambios), si no hay, la copia guardada
-  if (req.mode === "navigate" || url.pathname.endsWith("/index.html")) {
+  // La página y su código: primero internet (para coger cambios), si no hay, la copia guardada
+  const shell = req.mode === "navigate" ? "index.html" : ["index.html", "app.js", "app.css"].find((f) => url.pathname.endsWith("/" + f));
+  if (shell) {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(VERSION).then((c) => c.put("index.html", copy));
+          if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(shell, copy)); }
           return res;
         })
-        .catch(() => caches.match("index.html", { ignoreSearch: true }))
+        .catch(() => caches.match(shell, { ignoreSearch: true }))
     );
     return;
   }

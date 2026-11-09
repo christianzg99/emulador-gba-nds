@@ -20,7 +20,7 @@ const scripts = ["emulator.js", "nipplejs.js", "shaders.js", "storage.js", "game
   fs.writeFileSync(path.join(DATA, "emulator.min.css"), css.styles);
 
   // Archivos que el service worker guarda para funcionar sin conexión
-  const files = ["./", "index.html", "data/loader.js", "data/emulator.min.js", "data/emulator.min.css",
+  const files = ["./", "index.html", "app.css", "app.js", "data/loader.js", "data/emulator.min.js", "data/emulator.min.css",
     "data/localization/es-ES.json", "data/localization/en-US.json", "data/localization/retroarch.json"];
   for (const d of ["compression", "cores", "cores/reports"]) {
     for (const f of fs.readdirSync(path.join(DATA, d))) {
