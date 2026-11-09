@@ -52,6 +52,13 @@
   #game .ejs_canvas{position:absolute!important;left:var(--sx)!important;top:var(--sy)!important;width:var(--sw)!important;height:var(--sh)!important}
   /* Sustituimos el mando táctil de EmulatorJS por el nuestro */
   #game .ejs_virtualGamepad_parent,#game .ejs_virtualGamepad_open{display:none!important}
+  /* Menú de EmulatorJS: solo aparece con el botón ☰, compacto y dentro de la pantalla del juego */
+  #game .ejs_menu_bar{position:absolute!important;left:calc(var(--sx) + var(--sw) / 2)!important;right:auto!important;top:calc(var(--sy) + var(--sh) - 8px)!important;bottom:auto!important;transform:translate(-50%,-100%)!important;width:max-content!important;max-width:calc(var(--sw) - 12px)!important;max-height:none!important;display:flex!important;flex-wrap:wrap!important;justify-content:center;align-items:center;gap:2px;padding:4px 6px!important;background:rgba(12,13,24,.94)!important;border:1px solid rgba(255,255,255,.16);border-radius:14px!important;z-index:20!important;transition:opacity .15s!important}
+  #game .ejs_menu_bar .ejs_menu_text,#game .ejs_menu_bar_spacer,#game .ejs_menu_bar input[type=range]{display:none!important}
+  #game .ejs_menu_bar .ejs_menu_button{width:auto!important;padding:7px!important;margin:0!important;flex:none!important;float:none!important}
+  #game .ejs_menu_bar .ejs_menu_button svg{float:none!important;width:22px;height:22px}
+  #game:not(.menu-on) .ejs_menu_bar{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+  #game.menu-on .ejs_menu_bar{opacity:1!important;visibility:visible!important;pointer-events:auto!important}
   #pad{position:absolute;inset:0;pointer-events:none;z-index:5;--acc:#7b5cff}
   #pad.nds{--acc:#19c3a6}
   #pad > *{position:absolute;pointer-events:auto;touch-action:none}
@@ -237,9 +244,9 @@
     window.EJS_startOnLoaded = false;    // el toque en "Jugar" desbloquea el audio
     window.EJS_startButtonName = "Jugar";
     window.EJS_backgroundColor = "#000";
-    window.EJS_Buttons = { netplay:false };
+    window.EJS_Buttons = { netplay:false, cheat:false, cacheManager:false, exitEmulation:false, fullscreen:false, screenRecord:false, quickSave:false, quickLoad:false, screenshot:false, contextMenu:false };
     window.EJS_defaultOptions = { "save-state-location": "browser" };
-    window.EJS_onGameStart = function(){ gameStarted = true; applyDsLayout(); layout(); };
+    window.EJS_onGameStart = function(){ gameStarted = true; hideCtxButton(); applyDsLayout(); layout(); };
 
     var s = document.createElement("script");
     s.src = "data/loader.js";
@@ -251,6 +258,14 @@
   var stage = document.getElementById("stage"), game = document.getElementById("game"), pad = document.getElementById("pad");
   var el = function(id){ return document.getElementById(id); };
 
+  function hideCtxButton(){       // botón "menú contextual" de EmulatorJS: sobra en móvil
+    try {
+      var E = window.EJS_emulator, name = E.localization(E.config.buttonOpts.contextMenu.displayName);
+      document.querySelectorAll("#game .ejs_menu_bar .ejs_menu_button").forEach(function(b){
+        var t = b.querySelector(".ejs_menu_text"); if (t && t.innerText === name) b.style.display = "none";
+      });
+    } catch(e){}
+  }
   function gm(){ return window.EJS_emulator && window.EJS_emulator.gameManager; }
   function key(k, v){ var g = gm(); if (g) try { g.simulateInput(0, k, v); } catch(e){} }
 
@@ -412,7 +427,9 @@
       el("bFF").classList.toggle("on", ff); toast(ff ? "Avance rápido activado" : "Velocidad normal");
     });
     el("bMenu").addEventListener("pointerdown", function(e){
-      e.preventDefault(); try { window.EJS_emulator.menu.toggle(); } catch(_){}
+      e.preventDefault();
+      var on = game.classList.toggle("menu-on");
+      el("bMenu").classList.toggle("on", on);
     });
     var armed = false, armT;
     el("bBack").addEventListener("pointerdown", function(e){
