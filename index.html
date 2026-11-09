@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Emulador GBA y NDS</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GBA & NDS">
+<meta name="theme-color" content="#0e0f1a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e0f1a; --panel:#171a2b; --line:#2a2f4a; --text:#eef0ff; --muted:#9aa0c3;
+    --gba:#7b5cff; --nds:#19c3a6; --warn:#ffb547;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  #home{max-width:560px;margin:0 auto;padding:28px 18px 40px}
+  .logo{font-family:"Press Start 2P",monospace;font-size:18px;line-height:1.5;letter-spacing:.5px;margin:6px 0 4px}
+  .logo span{color:var(--gba)} .logo b{color:var(--nds);font-weight:400}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 24px}
+  .cards{display:grid;gap:14px}
+  .card{position:relative;display:flex;align-items:center;gap:16px;width:100%;padding:18px;border-radius:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:transform .12s, border-color .12s}
+  .card:active{transform:scale(.98)}
+  .card.gba{border-color:color-mix(in srgb,var(--gba) 45%,var(--line))}
+  .card.nds{border-color:color-mix(in srgb,var(--nds) 45%,var(--line))}
+  .icon{flex:none;width:64px;height:64px;border-radius:14px;display:grid;place-items:center}
+  .gba .icon{background:color-mix(in srgb,var(--gba) 22%,transparent)}
+  .nds .icon{background:color-mix(in srgb,var(--nds) 22%,transparent)}
+  .card h2{margin:0 0 4px;font-size:17px;font-weight:800}
+  .card p{margin:0;color:var(--muted);font-size:13px}
+  .opt{margin-top:22px;padding:16px;border-radius:16px;background:var(--panel);border:1px solid var(--line)}
+  .opt h3{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
+  .seg{display:grid;grid-template-columns:1fr 1fr;background:#0f1120;border-radius:12px;padding:4px;gap:4px}
+  .seg button{border:0;border-radius:9px;padding:10px 8px;background:transparent;color:var(--muted);font:600 13px Inter,sans-serif;cursor:pointer}
+  .seg button.on{background:var(--nds);color:#04211c}
+  .seg small{display:block;font-weight:400;font-size:11px;opacity:.85;margin-top:2px}
+  .drop{margin-top:14px;padding:18px;border:2px dashed var(--line);border-radius:16px;text-align:center;color:var(--muted);font-size:13px}
+  .drop.over{border-color:var(--gba);color:var(--text)}
+  .notes{margin-top:22px;color:var(--muted);font-size:12.5px;line-height:1.55}
+  .notes li{margin-bottom:6px}
+  #err{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--warn) 15%,transparent);border:1px solid color-mix(in srgb,var(--warn) 50%,transparent);color:var(--warn);font-size:13px}
+  /* Pantalla de juego */
+  #play{display:none;position:fixed;inset:0;background:#000;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  #bar{flex:none;display:flex;align-items:center;gap:10px;padding:8px 10px;background:#0b0c15;border-bottom:1px solid #1d2035}
+  #bar button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:10px;padding:8px 12px;font:600 13px Inter,sans-serif;cursor:pointer}
+  #title{flex:1;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #wrap{flex:1;min-height:0;position:relative}
+  #game{position:absolute;inset:0}
+</style>
+</head>
+<body>
+
+<section id="home">
+  <div class="logo"><span>GBA</span> &amp; <b>NDS</b><br>Emulador</div>
+  <p class="sub">Carga una ROM desde tu móvil u ordenador y juega en el navegador. Nada se sube a ningún sitio: todo corre en tu dispositivo.</p>
+
+  <div class="cards">
+    <button class="card gba" data-sys="gba">
+      <div class="icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="2" y="10" width="36" height="20" rx="8" stroke="#a48dff" stroke-width="2.5"/><rect x="13" y="14" width="14" height="12" rx="2" fill="#a48dff" opacity=".45"/><path d="M7 20h4M9 18v4" stroke="#a48dff" stroke-width="2.2" stroke-linecap="round"/><circle cx="31" cy="18.5" r="1.6" fill="#a48dff"/><circle cx="33.5" cy="21.5" r="1.6" fill="#a48dff"/></svg>
+      </div>
+      <div><h2>Game Boy Advance</h2><p>.gba · también .gb y .gbc · motor mGBA</p></div>
+    </button>
+    <button class="card nds" data-sys="nds">
+      <div class="icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="8" y="3" width="24" height="16" rx="3" stroke="#3fe0c4" stroke-width="2.5"/><rect x="8" y="21" width="24" height="16" rx="3" stroke="#3fe0c4" stroke-width="2.5"/><rect x="13" y="7" width="14" height="8" rx="1" fill="#3fe0c4" opacity=".45"/><rect x="13" y="25" width="14" height="8" rx="1" fill="#3fe0c4" opacity=".45"/></svg>
+      </div>
+      <div><h2>Nintendo DS</h2><p>.nds · pantalla táctil con el dedo o el ratón</p></div>
+    </button>
+  </div>
+
+  <div class="opt">
+    <h3>Motor de Nintendo DS</h3>
+    <div class="seg" id="dsCore">
+      <button data-core="desmume2015">Rápido<small>DeSmuME · mejor en móvil</small></button>
+      <button data-core="melonds">Preciso<small>melonDS · mejor en PC</small></button>
+    </div>
+  </div>
+
+  <div class="drop" id="drop">…o arrastra aquí un archivo .gba, .gb, .gbc, .nds, .zip o .7z</div>
+  <div id="err"></div>
+
+  <ul class="notes">
+    <li>Usa copias de tus propios juegos. Este emulador no incluye ROMs.</li>
+    <li>Las partidas guardadas dentro del juego y los estados de guardado se quedan en este navegador. Si borras los datos del navegador o cambias de dispositivo, se pierden.</li>
+    <li>En móvil aparecen los mandos táctiles. En PC: flechas, Z/X = B/A, Enter = Start, Shift = Select (se pueden cambiar en el menú del emulador).</li>
+    <li>Con un .zip o .7z se usa el sistema de la tarjeta que pulses; si lo arrastras, se intenta adivinar por el contenido.</li>
+  </ul>
+</section>
+
+<section id="play">
+  <div id="bar">
+    <button id="back">← Cambiar juego</button>
+    <div id="title"></div>
+  </div>
+  <div id="wrap"><div id="game"></div></div>
+</section>
+
+<input type="file" id="file" hidden>
+
+<script>
+(function(){
+  var store = {
+    get:function(k){try{return localStorage.getItem(k)}catch(e){return null}},
+    set:function(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  };
+  var dsCore = store.get("dsCore") || "desmume2015";
+  var segBtns = document.querySelectorAll("#dsCore button");
+  function paintSeg(){ segBtns.forEach(function(b){ b.classList.toggle("on", b.dataset.core===dsCore); }); }
+  segBtns.forEach(function(b){ b.addEventListener("click", function(){ dsCore=b.dataset.core; store.set("dsCore",dsCore); paintSeg(); }); });
+  paintSeg();
+
+  var fileInput = document.getElementById("file");
+  var pickedSys = null;
+  document.querySelectorAll(".card").forEach(function(c){
+    c.addEventListener("click", function(){ pickedSys = c.dataset.sys; fileInput.value=""; fileInput.click(); });
+  });
+  fileInput.addEventListener("change", function(){ if(fileInput.files[0]) start(fileInput.files[0], pickedSys); });
+
+  var drop = document.getElementById("drop");
+  ["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add("over");}); });
+  ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("over");}); });
+  drop.addEventListener("drop", function(e){ var f=e.dataTransfer.files[0]; if(f) start(f, null); });
+
+  function showErr(msg){ var el=document.getElementById("err"); el.textContent=msg; el.style.display="block"; }
+
+  function sysFromName(name){
+    var ext = (name.split(".").pop()||"").toLowerCase();
+    if (["gba","gb","gbc","agb","sgb"].indexOf(ext)>=0) return "gba";
+    if (["nds","dsi","srl"].indexOf(ext)>=0) return "nds";
+    if (["zip","7z","rar"].indexOf(ext)>=0) return "archive";
+    return null;
+  }
+
+  // Para .zip sin tarjeta elegida: busca el nombre del archivo interno en la cabecera ZIP
+  function guessFromZip(file){
+    return file.slice(0, Math.min(file.size, 4096)).arrayBuffer().then(function(buf){
+      var txt = new TextDecoder("latin1").decode(new Uint8Array(buf)).toLowerCase();
+      if (/\.nds/.test(txt)) return "nds";
+      if (/\.gb[ac]?/.test(txt)) return "gba";
+      return null;
+    }).catch(function(){ return null; });
+  }
+
+  var started = false;
+  function start(file, chosen){
+    if (started) return;
+    var detected = sysFromName(file.name);
+    var p;
+    if (detected==="gba" || detected==="nds") p = Promise.resolve(detected);
+    else if (detected==="archive") p = chosen ? Promise.resolve(chosen) : guessFromZip(file);
+    else p = Promise.resolve(chosen);
+    p.then(function(sys){
+      if (!sys){ showErr("No reconozco este archivo. Pulsa la tarjeta de GBA o de NDS y elígelo desde ahí."); return; }
+      if (detected && detected!=="archive" && chosen && chosen!==detected){
+        // Si el usuario pulsó la tarjeta equivocada, mandamos la extensión
+        sys = detected;
+      }
+      launch(file, sys);
+    });
+  }
+
+  function launch(file, sys){
+    started = true;
+    var core = sys==="gba" ? "mgba" : dsCore;
+    var name = file.name.replace(/\.[^.]+$/,"");
+    document.getElementById("home").style.display="none";
+    document.getElementById("play").style.display="flex";
+    document.getElementById("title").textContent = name + " · " + (sys==="gba" ? "GBA" : "NDS");
+
+    window.EJS_player = "#game";
+    window.EJS_core = core;
+    window.EJS_gameUrl = file;           // EmulatorJS acepta un File/Blob directamente
+    window.EJS_gameName = name;
+    window.EJS_pathtodata = "data/";
+    window.EJS_DEBUG_XX = true;          // carga los scripts sin minificar incluidos aquí
+    window.EJS_threads = false;
+    window.EJS_language = "es-ES";
+    window.EJS_color = sys==="gba" ? "#7b5cff" : "#19c3a6";
+    window.EJS_startOnLoaded = false;    // el toque en "Jugar" desbloquea el audio
+    window.EJS_startButtonName = "Jugar";
+    window.EJS_backgroundColor = "#000";
+    window.EJS_Buttons = { netplay:false };
+    window.EJS_defaultOptions = { "save-state-location": "browser" };
+
+    var s = document.createElement("script");
+    s.src = "data/loader.js";
+    document.body.appendChild(s);
+  }
+
+  document.getElementById("back").addEventListener("click", function(){ location.reload(); });
+})();
+</script>
+</body>
+</html>
