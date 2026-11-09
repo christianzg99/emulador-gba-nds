@@ -4,7 +4,7 @@ const path = require("path");
 const { minify } = require("terser");
 const CleanCSS = require("clean-css");
 
-const SITE = process.argv[2] || "/home/claude/site";
+const SITE = process.argv[2] || path.join(__dirname, "..");
 const DATA = path.join(SITE, "data");
 // mismo orden que data/loader.js
 const scripts = ["emulator.js", "nipplejs.js", "shaders.js", "storage.js", "gamepad.js", "GameManager.js", "socket.io.min.js", "compression.js"];
