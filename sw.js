@@ -1,6 +1,6 @@
 // Service worker: permite abrir el emulador sin conexión.
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
-const VERSION = "emu-6c2e41cb30";
+const VERSION = "emu-04513b5422";
 const FILES = [
   "./",
   "index.html",
@@ -43,6 +43,16 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  // Carátulas oficiales (libretro-thumbnails): se guardan para verlas también sin conexión
+  if (url.hostname === "raw.githubusercontent.com" && url.pathname.startsWith("/libretro-thumbnails/")) {
+    event.respondWith(
+      caches.open("art-v1").then((c) => c.match(req).then((hit) => hit || fetch(req).then((res) => {
+        if (res.ok) c.put(req, res.clone());
+        return res;
+      })))
+    );
+    return;
+  }
   if (url.origin !== location.origin) return;
 
   // La página y su código: primero internet (para coger cambios), si no hay, la copia guardada

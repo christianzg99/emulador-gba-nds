@@ -19,8 +19,15 @@
   <div class="logo"><span>GBA</span> &amp; <b>NDS</b><br>Emulador</div>
   <p class="sub">Carga una ROM desde tu móvil u ordenador y juega en el navegador. Nada se sube a ningún sitio: todo corre en tu dispositivo.</p>
 
+  <div id="pwaTip" class="tip" style="display:none">
+    <b>Para que iOS no borre tus partidas</b>
+    <span>Úsalo desde la pantalla de inicio: en Safari pulsa Compartir → «Añadir a pantalla de inicio» y ábrelo desde ese icono.</span>
+    <button id="pwaTipOk">Entendido</button>
+  </div>
+
   <div id="recent">
-    <h3>Recientes</h3>
+    <div class="libhead"><h3>Tus juegos</h3><span id="libStore"></span></div>
+    <input id="libSearch" type="search" placeholder="Buscar juego…" autocomplete="off" style="display:none">
     <div class="rlist" id="rlist"></div>
   </div>
 
@@ -69,7 +76,7 @@
 
   <ul class="notes">
     <li>Usa copias de tus propios juegos. Este emulador no incluye ROMs.</li>
-    <li>Los últimos 8 juegos que abras se guardan en este navegador para abrirlos desde Recientes. Ocupan espacio en el móvil; quítalos con ✕ cuando quieras.</li>
+    <li>Los juegos que abres se guardan en «Tus juegos» para abrirlos con un toque. Ocupan espacio en el móvil: con ⋯ puedes ver cuánto y quitarlos.</li>
     <li>Las partidas guardadas dentro del juego y los estados de guardado se quedan en este navegador. Si borras los datos del navegador o cambias de dispositivo, se pierden.</li>
     <li>Durante el juego, el botón ☰ abre el menú: guardado rápido, velocidad, turbo, filtros de imagen, pantallas de DS y tamaño o posición de los botones.</li>
     <li>Con un mando Bluetooth los botones táctiles se ocultan solos. En PC: flechas, Z/X = B/A, Enter = Start, Shift = Select.</li>
@@ -120,6 +127,10 @@
           <h4>Guardado rápido</h4>
           <div class="slots" id="slots"></div>
 
+          <h4>Partida de este juego (.sav)</h4>
+          <div class="seg" id="savSeg"><button id="savExport">Exportar .sav</button><button id="savImport">Importar .sav</button></div>
+          <input type="file" id="savFile" hidden>
+
           <h4>Velocidad del avance rápido</h4>
           <div class="seg" id="ffSeg"><button data-v="2.0">×2</button><button data-v="3.0">×3</button><button data-v="4.0">×4</button><button data-v="8.0">×8</button></div>
 
@@ -128,6 +139,9 @@
 
           <h4>Imagen</h4>
           <div class="seg four" id="filterSeg"><button data-v="sharp">Nítida</button><button data-v="smooth">Suave</button><button data-v="lcd">LCD</button><button data-v="crt">CRT</button></div>
+
+          <h4>Opciones</h4>
+          <div class="seg toggles" id="optSeg"><button data-o="silentSound">Sonar con el móvil en silencio</button><button data-o="haptics">Vibración al pulsar</button></div>
 
           <div id="dsOpts">
             <h4>Pantallas de DS</h4>
@@ -159,6 +173,20 @@
 </section>
 
 <input type="file" id="file" hidden>
+
+<div id="gameSheet" class="sheetwrap fixed">
+  <div class="sheet">
+    <div class="sh-head"><b id="gsName"></b><button class="sh-x" data-close>✕</button></div>
+    <div class="sh-body">
+      <p id="gsInfo" class="gsinfo"></p>
+      <div class="gslist">
+        <button id="gsFav"></button>
+        <button id="gsExtras"></button>
+        <button id="gsRemove" class="danger"></button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>
