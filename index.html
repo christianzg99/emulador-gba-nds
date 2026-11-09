@@ -33,6 +33,21 @@
   .nds .icon{background:color-mix(in srgb,var(--nds) 22%,transparent)}
   .card h2{margin:0 0 4px;font-size:17px;font-weight:800}
   .card p{margin:0;color:var(--muted);font-size:13px}
+  #recent{display:none;margin:0 0 22px}
+  #recent.has{display:block}
+  #recent h3{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
+  .rlist{display:grid;gap:8px}
+  .ri{display:flex;align-items:center;gap:12px;width:100%;padding:10px 10px 10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+  .ri:active{transform:scale(.99)}
+  .ri .tag{flex:none;width:44px;height:44px;border-radius:11px;display:grid;place-items:center;font:800 11px Inter,sans-serif;letter-spacing:.5px}
+  .ri .tag.gba{background:color-mix(in srgb,var(--gba) 25%,transparent);color:#b6a4ff}
+  .ri .tag.nds{background:color-mix(in srgb,var(--nds) 25%,transparent);color:#5fe8d0}
+  .ri .txt{flex:1;min-width:0}
+  .ri .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ri .mt{color:var(--muted);font-size:12px;margin-top:2px}
+  .ri .x{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--muted);font-size:16px}
+  .ri .x:active{background:rgba(255,255,255,.08)}
+  .ri.loading{opacity:.6;pointer-events:none}
   .opt{margin-top:22px;padding:16px;border-radius:16px;background:var(--panel);border:1px solid var(--line)}
   .opt h3{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
   .seg{display:grid;grid-template-columns:1fr 1fr;background:#0f1120;border-radius:12px;padding:4px;gap:4px}
@@ -87,6 +102,11 @@
   <div class="logo"><span>GBA</span> &amp; <b>NDS</b><br>Emulador</div>
   <p class="sub">Carga una ROM desde tu móvil u ordenador y juega en el navegador. Nada se sube a ningún sitio: todo corre en tu dispositivo.</p>
 
+  <div id="recent">
+    <h3>Recientes</h3>
+    <div class="rlist" id="rlist"></div>
+  </div>
+
   <div class="cards">
     <button class="card gba" data-sys="gba">
       <div class="icon">
@@ -123,6 +143,7 @@
 
   <ul class="notes">
     <li>Usa copias de tus propios juegos. Este emulador no incluye ROMs.</li>
+    <li>Los últimos 8 juegos que abras se guardan en este navegador para abrirlos desde Recientes. Ocupan espacio en el móvil; quítalos con ✕ cuando quieras.</li>
     <li>Las partidas guardadas dentro del juego y los estados de guardado se quedan en este navegador. Si borras los datos del navegador o cambias de dispositivo, se pierden.</li>
     <li>En móvil aparecen los mandos táctiles. En PC: flechas, Z/X = B/A, Enter = Start, Shift = Select (se pueden cambiar en el menú del emulador).</li>
     <li>Con un .zip o .7z se usa el sistema de la tarjeta que pulses; si lo arrastras, se intenta adivinar por el contenido.</li>
@@ -210,6 +231,89 @@
     }).catch(function(){ return null; });
   }
 
+  /* ---------- Juegos recientes: se guardan en este navegador para abrirlos con un toque ---------- */
+  var Recent = (function(){
+    var DB = "emu-recientes", MAX = 8, dbp = null;
+    function db(){
+      if (dbp) return dbp;
+      dbp = new Promise(function(res, rej){
+        try {
+          var r = indexedDB.open(DB, 1);
+          r.onupgradeneeded = function(){ var d=r.result; d.createObjectStore("meta",{keyPath:"id"}); d.createObjectStore("roms"); };
+          r.onsuccess = function(){ res(r.result); };
+          r.onerror = function(){ rej(r.error); };
+        } catch(e){ rej(e); }
+      });
+      return dbp;
+    }
+    function tx(stores, mode, fn){
+      return db().then(function(d){ return new Promise(function(res, rej){
+        var t = d.transaction(stores, mode), out = fn(t);
+        t.oncomplete = function(){ res(out && out.result !== undefined ? out.result : out); };
+        t.onerror = t.onabort = function(){ rej(t.error); };
+      }); });
+    }
+    function list(){
+      return tx(["meta"], "readonly", function(t){ return t.objectStore("meta").getAll(); })
+        .then(function(a){ return (a||[]).sort(function(x,y){ return y.last - x.last; }); })
+        .catch(function(){ return []; });
+    }
+    function save(file, sys){
+      var id = sys + ":" + file.name + ":" + file.size;
+      try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+      return list().then(function(items){
+        var exists = items.some(function(i){ return i.id === id; });
+        return tx(["meta","roms"], "readwrite", function(t){
+          t.objectStore("meta").put({id:id, name:file.name, sys:sys, size:file.size, last:Date.now()});
+          if (!exists) t.objectStore("roms").put(file.slice(0, file.size, file.type || "application/octet-stream"), id);
+        }).then(function(){
+          var extra = items.filter(function(i){ return i.id !== id; }).slice(MAX - 1);
+          return Promise.all(extra.map(function(i){ return remove(i.id); }));
+        });
+      }).catch(function(){ toast("No había espacio para guardarlo en Recientes"); });
+    }
+    function get(id){
+      return tx(["roms"], "readonly", function(t){ return t.objectStore("roms").get(id); });
+    }
+    function remove(id){
+      return tx(["meta","roms"], "readwrite", function(t){ t.objectStore("meta").delete(id); t.objectStore("roms").delete(id); });
+    }
+    return {list:list, save:save, get:get, remove:remove};
+  })();
+
+  function ago(ts){
+    var m = Math.round((Date.now()-ts)/60000);
+    if (m < 1) return "ahora mismo"; if (m < 60) return "hace " + m + " min";
+    var h = Math.round(m/60); if (h < 24) return "hace " + h + " h";
+    var d = Math.round(h/24); return d === 1 ? "ayer" : "hace " + d + " días";
+  }
+  function mb(b){ return b >= 1048576 ? Math.round(b/1048576) + " MB" : Math.max(1, Math.round(b/1024)) + " KB"; }
+
+  function renderRecent(){
+    Recent.list().then(function(items){
+      var box = document.getElementById("recent"), ul = document.getElementById("rlist");
+      ul.innerHTML = "";
+      box.classList.toggle("has", items.length > 0);
+      items.forEach(function(it){
+        var b = document.createElement("div"); b.className = "ri"; b.setAttribute("role","button");
+        var nm = it.name.replace(/\.[^.]+$/, "");
+        b.innerHTML = '<div class="tag '+it.sys+'">'+(it.sys==="gba"?"GBA":"NDS")+'</div><div class="txt"><div class="nm"></div><div class="mt"></div></div><div class="x" aria-label="Quitar">✕</div>';
+        b.querySelector(".nm").textContent = nm;
+        b.querySelector(".mt").textContent = ago(it.last) + " · " + mb(it.size);
+        b.addEventListener("click", function(e){
+          if (e.target.closest(".x")){ Recent.remove(it.id).then(renderRecent); return; }
+          b.classList.add("loading"); b.querySelector(".mt").textContent = "Cargando…";
+          Recent.get(it.id).then(function(blob){
+            if (!blob){ Recent.remove(it.id).then(renderRecent); showErr("No he encontrado ese juego guardado. Ábrelo de nuevo desde Archivos."); return; }
+            launch(new File([blob], it.name), it.sys);
+          }).catch(function(){ b.classList.remove("loading"); showErr("No se pudo abrir. Ábrelo de nuevo desde Archivos."); });
+        });
+        ul.appendChild(b);
+      });
+    });
+  }
+  renderRecent();
+
   var started = false;
   function start(file, chosen){
     if (started) return;
@@ -230,6 +334,7 @@
 
   function launch(file, sys){
     started = true;
+    Recent.save(file, sys);
     var core = sys==="gba" ? "mgba" : dsCore;
     var name = file.name.replace(/\.[^.]+$/,"");
     document.getElementById("home").style.display="none";
