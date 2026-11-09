@@ -54,10 +54,13 @@
   .seg button{border:0;border-radius:9px;padding:10px 8px;background:transparent;color:var(--muted);font:600 13px Inter,sans-serif;cursor:pointer}
   .seg button.on{background:var(--nds);color:#04211c}
   .seg small{display:block;font-weight:400;font-size:11px;opacity:.85;margin-top:2px}
+  .seg.bk button{background:#1d2136;color:var(--text)}
+  .seg.bk button:active{background:#262b45}
   .drop{margin-top:14px;padding:18px;border:2px dashed var(--line);border-radius:16px;text-align:center;color:var(--muted);font-size:13px}
   .drop.over{border-color:var(--gba);color:var(--text)}
   .notes{margin-top:22px;color:var(--muted);font-size:12.5px;line-height:1.55}
   .notes li{margin-bottom:6px}
+  #err.ok{background:color-mix(in srgb,var(--nds) 15%,transparent);border-color:color-mix(in srgb,var(--nds) 50%,transparent);color:#5fe8d0}
   #err{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--warn) 15%,transparent);border:1px solid color-mix(in srgb,var(--warn) 50%,transparent);color:var(--warn);font-size:13px}
   /* Pantalla de juego */
   #play{display:none;position:fixed;inset:0;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -92,6 +95,13 @@
   #resume.show{display:grid}
   #resume div{display:flex;flex-direction:column;align-items:center;gap:10px;color:#fff;font:600 15px Inter,sans-serif}
   #resume b{display:grid;place-items:center;width:76px;height:76px;border-radius:50%;background:var(--acc,#7b5cff);font-size:30px;padding-left:5px}
+  #cont{display:none;position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.65);place-items:center;padding:20px}
+  #cont.show{display:grid}
+  #cont .box{width:min(340px,100%);background:#171a2b;border:1px solid #2a2f4a;border-radius:18px;padding:20px;display:grid;gap:10px;text-align:center}
+  #cont .t{font:800 17px Inter,sans-serif;color:#fff}
+  #cont .w{color:#9aa0c3;font-size:13px;margin-bottom:6px}
+  #cont button{border:1px solid #2a2f4a;background:transparent;color:#eef0ff;border-radius:12px;padding:12px;font:600 14px Inter,sans-serif;cursor:pointer}
+  #cont button.pri{background:var(--acc,#7b5cff);border-color:transparent;color:#fff}
   #toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:6;background:rgba(0,0,0,.75);color:#fff;font:600 12px Inter,sans-serif;padding:7px 12px;border-radius:14px;pointer-events:none;opacity:0;transition:opacity .3s}
   #toast.show{opacity:1}
 </style>
@@ -141,6 +151,15 @@
   <div class="drop" id="drop">…o arrastra aquí un archivo .gba, .gb, .gbc, .nds, .zip o .7z</div>
   <div id="err"></div>
 
+  <div class="opt">
+    <h3>Partidas guardadas</h3>
+    <div class="seg bk">
+      <button id="bkExport">Hacer copia<small>guárdala en Archivos o iCloud</small></button>
+      <button id="bkImport">Restaurar copia<small>desde un .zip</small></button>
+    </div>
+  </div>
+  <input type="file" id="bkFile" accept=".zip,application/zip" hidden>
+
   <ul class="notes">
     <li>Usa copias de tus propios juegos. Este emulador no incluye ROMs.</li>
     <li>Los últimos 8 juegos que abras se guardan en este navegador para abrirlos desde Recientes. Ocupan espacio en el móvil; quítalos con ✕ cuando quieras.</li>
@@ -175,6 +194,12 @@
     </div>
     <div id="toast"></div>
     <div id="resume"><div><b>▶</b>Toca para continuar</div></div>
+    <div id="cont"><div class="box">
+      <div class="t">¿Continuar donde lo dejaste?</div>
+      <div class="w" id="contWhen"></div>
+      <button id="contYes" class="pri">Continuar</button>
+      <button id="contNo">No, ir al inicio del juego</button>
+    </div></div>
   </div>
 </section>
 
@@ -211,7 +236,8 @@
   ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("over");}); });
   drop.addEventListener("drop", function(e){ var f=e.dataTransfer.files[0]; if(f) start(f, null); });
 
-  function showErr(msg){ var el=document.getElementById("err"); el.textContent=msg; el.style.display="block"; }
+  function showErr(msg){ var el=document.getElementById("err"); el.textContent=msg; el.className=""; el.style.display="block"; el.scrollIntoView({block:"nearest"}); }
+  function showOk(msg){ var el=document.getElementById("err"); el.textContent=msg; el.className="ok"; el.style.display="block"; el.scrollIntoView({block:"nearest"}); }
 
   function sysFromName(name){
     var ext = (name.split(".").pop()||"").toLowerCase();
@@ -238,8 +264,13 @@
       if (dbp) return dbp;
       dbp = new Promise(function(res, rej){
         try {
-          var r = indexedDB.open(DB, 1);
-          r.onupgradeneeded = function(){ var d=r.result; d.createObjectStore("meta",{keyPath:"id"}); d.createObjectStore("roms"); };
+          var r = indexedDB.open(DB, 2);
+          r.onupgradeneeded = function(){
+            var d=r.result;
+            if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta",{keyPath:"id"});
+            if (!d.objectStoreNames.contains("roms")) d.createObjectStore("roms");
+            if (!d.objectStoreNames.contains("states")) d.createObjectStore("states");   // "continuar donde lo dejaste"
+          };
           r.onsuccess = function(){ res(r.result); };
           r.onerror = function(){ rej(r.error); };
         } catch(e){ rej(e); }
@@ -259,7 +290,7 @@
         .catch(function(){ return []; });
     }
     function save(file, sys){
-      var id = sys + ":" + file.name + ":" + file.size;
+      var id = gameId(file, sys);
       try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
       return list().then(function(items){
         var exists = items.some(function(i){ return i.id === id; });
@@ -276,10 +307,18 @@
       return tx(["roms"], "readonly", function(t){ return t.objectStore("roms").get(id); });
     }
     function remove(id){
-      return tx(["meta","roms"], "readwrite", function(t){ t.objectStore("meta").delete(id); t.objectStore("roms").delete(id); });
+      return tx(["meta","roms","states"], "readwrite", function(t){ ["meta","roms","states"].forEach(function(n){ t.objectStore(n).delete(id); }); });
     }
-    return {list:list, save:save, get:get, remove:remove};
+    function putState(id, blob){
+      return tx(["states"], "readwrite", function(t){ t.objectStore("states").put({blob:blob, ts:Date.now()}, id); });
+    }
+    function getState(id){
+      return tx(["states"], "readonly", function(t){ return t.objectStore("states").get(id); });
+    }
+    return {list:list, save:save, get:get, remove:remove, putState:putState, getState:getState};
   })();
+
+  function gameId(file, sys){ return sys + ":" + file.name + ":" + file.size; }
 
   function ago(ts){
     var m = Math.round((Date.now()-ts)/60000);
@@ -314,7 +353,138 @@
   }
   renderRecent();
 
-  var started = false;
+  /* ---------- Copia de seguridad de las partidas del juego (las guarda EmulatorJS en IndexedDB "/data/saves") ---------- */
+  var Backup = (function(){
+    var DBN = "/data/saves", STORE = "FILE_DATA", PREFIX = "/data/saves/";
+    function openRaw(version){
+      return new Promise(function(res, rej){
+        var r = version ? indexedDB.open(DBN, version) : indexedDB.open(DBN);
+        r.onupgradeneeded = function(){      // igual que lo crea Emscripten (IDBFS)
+          var d = r.result;
+          if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE).createIndex("timestamp", "timestamp", {unique:false});
+        };
+        r.onsuccess = function(){ res(r.result); };
+        r.onerror = function(){ rej(r.error); };
+      });
+    }
+    function openDb(create){
+      return openRaw().then(function(d){
+        if (!create || d.objectStoreNames.contains(STORE)) return d;
+        var v = d.version + 1; d.close(); return openRaw(v);
+      });
+    }
+    function readAll(){
+      return openDb(false).then(function(d){
+        return new Promise(function(res, rej){
+          if (!d.objectStoreNames.contains(STORE)){ d.close(); return res([]); }
+          var out = [], t = d.transaction(STORE, "readonly"), c = t.objectStore(STORE).openCursor();
+          c.onsuccess = function(){
+            var cur = c.result; if (!cur) return;
+            var v = cur.value, k = String(cur.key);
+            if (v && v.contents && k.indexOf(PREFIX) === 0) out.push({name: k.slice(PREFIX.length), data: new Uint8Array(v.contents)});
+            cur.continue();
+          };
+          t.oncomplete = function(){ d.close(); res(out); };
+          t.onerror = function(){ d.close(); rej(t.error); };
+        });
+      });
+    }
+    function writeAll(entries){
+      return openDb(true).then(function(d){
+        return new Promise(function(res, rej){
+          var t = d.transaction(STORE, "readwrite"), st = t.objectStore(STORE), now = new Date();
+          entries.forEach(function(e){
+            var parts = e.name.split("/"), acc = PREFIX.slice(0, -1);
+            for (var i = 0; i < parts.length - 1; i++){ acc += "/" + parts[i]; st.put({timestamp: now, mode: 16893}, acc); }
+            st.put({timestamp: now, mode: 33206, contents: e.data}, PREFIX + e.name);
+          });
+          t.oncomplete = function(){ d.close(); res(entries.length); };
+          t.onerror = function(){ d.close(); rej(t.error); };
+        });
+      });
+    }
+    // ZIP mínimo sin compresión (se abre en Archivos de iOS, Windows, macOS…)
+    var CRC = (function(){ var t = new Uint32Array(256); for (var n=0;n<256;n++){ var c=n; for (var k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+    function crc32(u8){ var c = 0xFFFFFFFF; for (var i=0;i<u8.length;i++) c = CRC[(c^u8[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+    function zip(entries){
+      var enc = new TextEncoder(), parts = [], central = [], off = 0;
+      entries.forEach(function(e){
+        var nm = enc.encode(e.name), crc = crc32(e.data), sz = e.data.length;
+        var h = new DataView(new ArrayBuffer(30));
+        h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(8,0,true);
+        h.setUint32(14,crc,true); h.setUint32(18,sz,true); h.setUint32(22,sz,true); h.setUint16(26,nm.length,true);
+        parts.push(h.buffer, nm, e.data);
+        var c = new DataView(new ArrayBuffer(46));
+        c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true);
+        c.setUint32(16,crc,true); c.setUint32(20,sz,true); c.setUint32(24,sz,true); c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
+        central.push(c.buffer, nm);
+        off += 30 + nm.length + sz;
+      });
+      var csize = central.reduce(function(a,b){ return a + b.byteLength; }, 0);
+      var end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0,0x06054b50,true); end.setUint16(8,entries.length,true); end.setUint16(10,entries.length,true);
+      end.setUint32(12,csize,true); end.setUint32(16,off,true);
+      return new Blob(parts.concat(central, [end.buffer]), {type:"application/zip"});
+    }
+    function inflate(u8){
+      if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("deflate"));
+      var ds = new DecompressionStream("deflate-raw");
+      return new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer().then(function(b){ return new Uint8Array(b); });
+    }
+    function unzip(buf){
+      var dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder(), eocd = -1;
+      for (var i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) if (dv.getUint32(i,true) === 0x06054b50){ eocd = i; break; }
+      if (eocd < 0) return Promise.reject(new Error("zip"));
+      var n = dv.getUint16(eocd+10,true), p = dv.getUint32(eocd+16,true), jobs = [];
+      for (var k = 0; k < n; k++){
+        var method = dv.getUint16(p+10,true), csz = dv.getUint32(p+20,true), nl = dv.getUint16(p+28,true), xl = dv.getUint16(p+30,true), cl = dv.getUint16(p+32,true), lo = dv.getUint32(p+42,true);
+        var name = dec.decode(u8.subarray(p+46, p+46+nl));
+        p += 46 + nl + xl + cl;
+        var start = lo + 30 + dv.getUint16(lo+26,true) + dv.getUint16(lo+28,true), raw = u8.slice(start, start + csz);
+        if (name.endsWith("/") || name.indexOf("..") >= 0 || name.indexOf("__MACOSX") === 0 || /(^|\/)\./.test(name)) continue;
+        jobs.push((method === 0 ? Promise.resolve(raw) : method === 8 ? inflate(raw) : Promise.reject(new Error("método"))).then((function(nm){ return function(data){ return {name: nm.replace(/^\/+/, ""), data: data}; }; })(name)));
+      }
+      return Promise.all(jobs);
+    }
+    function exportAll(){
+      return readAll().then(function(entries){
+        if (!entries.length){ showErr("Todavía no hay partidas guardadas que copiar."); return; }
+        var d = new Date(), stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+        var file = new File([zip(entries)], "partidas-emulador-" + stamp + ".zip", {type:"application/zip"});
+        if (navigator.canShare && navigator.canShare({files:[file]})){
+          return navigator.share({files:[file], title:"Partidas del emulador"}).catch(function(e){ if (e && e.name !== "AbortError") download(file); });
+        }
+        download(file);
+      });
+    }
+    function download(file){
+      var a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name;
+      document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    }
+    function importZip(file){
+      return file.arrayBuffer().then(unzip).then(function(entries){
+        if (!entries.length) throw new Error("vacío");
+        return writeAll(entries);
+      });
+    }
+    return {exportAll:exportAll, importZip:importZip, readAll:readAll};
+  })();
+
+  document.getElementById("bkExport").addEventListener("click", function(){
+    Backup.exportAll().catch(function(){ showErr("No se pudo hacer la copia."); });
+  });
+  document.getElementById("bkImport").addEventListener("click", function(){ var f = document.getElementById("bkFile"); f.value = ""; f.click(); });
+  document.getElementById("bkFile").addEventListener("change", function(){
+    var f = this.files[0]; if (!f) return;
+    Backup.importZip(f).then(function(n){ showOk((n === 1 ? "Restaurada 1 partida" : "Restauradas " + n + " partidas") + ". Ya puedes abrir tus juegos."); })
+      .catch(function(){ showErr("Ese archivo no parece una copia de partidas válida."); });
+  });
+
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  }
+
+  var started = false, CURRENT_ID = null;
   function start(file, chosen){
     if (started) return;
     var detected = sysFromName(file.name);
@@ -334,6 +504,7 @@
 
   function launch(file, sys){
     started = true;
+    CURRENT_ID = gameId(file, sys);
     Recent.save(file, sys);
     var core = sys==="gba" ? "mgba" : dsCore;
     var name = file.name.replace(/\.[^.]+$/,"");
@@ -347,7 +518,6 @@
     window.EJS_gameUrl = file;           // EmulatorJS acepta un File/Blob directamente
     window.EJS_gameName = name;
     window.EJS_pathtodata = "data/";
-    window.EJS_DEBUG_XX = true;          // carga los scripts sin minificar incluidos aquí
     window.EJS_threads = false;
     window.EJS_forceLegacyCores = (gfx === "compat");   // WebGL 1: evita la pantalla en blanco de Safari en iPhone
     window.EJS_language = "es-ES";
@@ -357,7 +527,7 @@
     window.EJS_backgroundColor = "#000";
     window.EJS_Buttons = { netplay:false, cheat:false, cacheManager:false, exitEmulation:false, fullscreen:false, screenRecord:false, quickSave:false, quickLoad:false, screenshot:false, contextMenu:false };
     window.EJS_defaultOptions = { "save-state-location": "browser" };
-    window.EJS_onGameStart = function(){ gameStarted = true; hideCtxButton(); applyDsLayout(); layout(); };
+    window.EJS_onGameStart = function(){ gameStarted = true; hideCtxButton(); applyDsLayout(); layout(); offerContinue(); };
 
     var s = document.createElement("script");
     s.src = "data/loader.js";
@@ -544,10 +714,61 @@
     } catch(e){}
     return out;
   }
+  /* ---------- Guardado: partida del juego (SRAM) y estado automático ---------- */
+  // EmulatorJS solo vuelca la partida guardada del juego a la memoria del navegador cada 5 minutos.
+  // La volcamos nosotros cada 30 s, al salir de la app y antes de cerrar el juego.
+  function flushSaves(){
+    return new Promise(function(res){
+      var g = gm(); if (!g || !gameStarted) return res();
+      var done = false, fin = function(){ if (!done){ done = true; res(); } };
+      try { g.saveSaveFiles(); } catch(e){}
+      try { g.FS.syncfs(false, fin); } catch(e){ fin(); }
+      setTimeout(fin, 2500);
+    });
+  }
+  function saveAutoState(){
+    var g = gm(); if (!g || !gameStarted || !CURRENT_ID || continueOpen) return Promise.resolve();
+    try {
+      var st = g.getState();
+      return Recent.putState(CURRENT_ID, new Blob([st])).catch(function(){});
+    } catch(e){ return Promise.resolve(); }
+  }
+  setInterval(function(){ if (gameStarted && !document.hidden) flushSaves(); }, 30000);
+
+  // MUY IMPORTANTE: al recargar o cerrar la página, EmulatorJS ejecuta su "salida", que desmonta la carpeta
+  // de partidas mientras aún se está guardando y acaba BORRANDO todas las partidas de IndexedDB.
+  // Volcamos la partida y le decimos que el juego ya no está en marcha para que no ejecute esa salida.
+  window.addEventListener("beforeunload", function(){
+    if (!gameStarted) return;
+    try { gm().saveSaveFiles(); } catch(e){}
+    try { window.EJS_emulator.started = false; } catch(e){}
+  });
+
+  var continueOpen = false;
+  function offerContinue(){
+    if (!CURRENT_ID) return;
+    Recent.getState(CURRENT_ID).then(function(rec){
+      if (!rec || !rec.blob) return;
+      var E = window.EJS_emulator; try { E.pause(); } catch(e){}
+      continueOpen = true;
+      el("contWhen").textContent = "Guardado " + ago(rec.ts);
+      el("cont").classList.add("show");
+      var close = function(){ continueOpen = false; el("cont").classList.remove("show"); try { E.play(); } catch(e){} };
+      el("contYes").onclick = function(){
+        rec.blob.arrayBuffer().then(function(buf){
+          try { gm().loadState(new Uint8Array(buf)); toast("Partida recuperada"); } catch(e){ toast("No se pudo cargar el guardado automático"); }
+          close();
+        });
+      };
+      el("contNo").onclick = close;
+    }).catch(function(){});
+  }
+
   var pausedByUs = false;
   function onHide(){
     if (!gameStarted) return;
     releaseAll();
+    flushSaves(); saveAutoState();
     var E = window.EJS_emulator;
     if (E && !E.paused){ try { E.pause(); pausedByUs = true; } catch(e){} }
     audioCtxs().forEach(function(c){ try { c.suspend(); } catch(e){} });
@@ -594,7 +815,11 @@
     var armed = false, armT;
     el("bBack").addEventListener("pointerdown", function(e){
       e.preventDefault();
-      if (armed){ location.reload(); return; }
+      if (armed){
+        el("bBack").textContent = "Guardando…";
+        Promise.all([flushSaves(), saveAutoState()]).then(function(){ location.reload(); });
+        return;
+      }
       armed = true; el("bBack").classList.add("armed"); el("bBack").textContent = "¿Salir? toca otra vez";
       clearTimeout(armT); armT = setTimeout(function(){ armed=false; el("bBack").classList.remove("armed"); el("bBack").textContent="←"; }, 2500);
     });
