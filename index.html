@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GBA & NDS">
-<meta name="theme-color" content="#0e0f1a">
+<meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -73,6 +73,10 @@
   #dpad .lit{fill:var(--acc);opacity:0;transition:opacity .05s}
   #dpad .lit.on{opacity:.75}
   #face .fb{position:absolute;border-radius:50%;font-size:22px}
+  #resume{display:none;position:absolute;inset:0;z-index:50;background:rgba(0,0,0,.6);place-items:center;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  #resume.show{display:grid}
+  #resume div{display:flex;flex-direction:column;align-items:center;gap:10px;color:#fff;font:600 15px Inter,sans-serif}
+  #resume b{display:grid;place-items:center;width:76px;height:76px;border-radius:50%;background:var(--acc,#7b5cff);font-size:30px;padding-left:5px}
   #toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:6;background:rgba(0,0,0,.75);color:#fff;font:600 12px Inter,sans-serif;padding:7px 12px;border-radius:14px;pointer-events:none;opacity:0;transition:opacity .3s}
   #toast.show{opacity:1}
 </style>
@@ -149,6 +153,7 @@
       <div class="vb ic" id="bBack" title="Cambiar juego">←</div>
     </div>
     <div id="toast"></div>
+    <div id="resume"><div><b>▶</b>Toca para continuar</div></div>
   </div>
 </section>
 
@@ -229,6 +234,7 @@
     var name = file.name.replace(/\.[^.]+$/,"");
     document.getElementById("home").style.display="none";
     document.getElementById("play").style.display="block";
+    document.documentElement.style.background = document.body.style.background = "#000";
     setupPad(sys, core);
 
     window.EJS_player = "#game";
@@ -412,7 +418,56 @@
     node.addEventListener("pointerdown", function(e){ e.preventDefault(); try{node.setPointerCapture(e.pointerId);}catch(_){} if(!n++) key(k,1); node.classList.add("on"); });
     var end = function(){ if (n){ n=0; key(k,0); node.classList.remove("on"); } };
     node.addEventListener("pointerup", end); node.addEventListener("pointercancel", end);
+    releasers.push(end);
   }
+  var releasers = [];
+  function releaseAll(){       // suelta todo lo pulsado (evita teclas "atascadas" al volver)
+    setDirs({u:0,d:0,l:0,r:0});
+    facePointers = {}; syncFace();
+    releasers.forEach(function(f){ f(); });
+  }
+
+  /* ---------- Volver de otra app (iOS congela el audio y el bucle del juego) ---------- */
+  function audioCtxs(){
+    var out = [];
+    try {
+      var AL = window.EJS_emulator.Module.AL;
+      if (AL && AL.currentCtx){
+        if (AL.currentCtx.audioCtx) out.push(AL.currentCtx.audioCtx);
+        (AL.currentCtx.sources || []).forEach(function(src){ if (src && src.gain && out.indexOf(src.gain.context) < 0) out.push(src.gain.context); });
+      }
+    } catch(e){}
+    return out;
+  }
+  var pausedByUs = false;
+  function onHide(){
+    if (!gameStarted) return;
+    releaseAll();
+    var E = window.EJS_emulator;
+    if (E && !E.paused){ try { E.pause(); pausedByUs = true; } catch(e){} }
+    audioCtxs().forEach(function(c){ try { c.suspend(); } catch(e){} });
+  }
+  function askResume(){
+    if (!gameStarted) return;
+    el("resume").classList.add("show");
+  }
+  function doResume(){
+    el("resume").classList.remove("show");
+    audioCtxs().forEach(function(c){ try { c.resume(); } catch(e){} });
+    var E = window.EJS_emulator;
+    if (pausedByUs && E){ try { E.play(); } catch(e){} }
+    pausedByUs = false;
+    releaseAll(); layout();
+  }
+  document.addEventListener("visibilitychange", function(){ if (document.hidden) onHide(); else askResume(); });
+  window.addEventListener("pagehide", onHide);
+  window.addEventListener("pageshow", function(e){ if (e.persisted) askResume(); });
+  // Red de seguridad: si el audio se queda parado sin que lo hayamos pausado, ofrecer reanudar
+  setInterval(function(){
+    if (!gameStarted || document.hidden || el("resume").classList.contains("show")) return;
+    var E = window.EJS_emulator; if (!E || E.paused) return;
+    if (audioCtxs().some(function(c){ return c.state && c.state !== "running"; })) { pausedByUs = false; askResume(); }
+  }, 1500);
 
   function setupPad(sys, core){
     SYS = sys; CORE = core;
@@ -438,6 +493,8 @@
       armed = true; el("bBack").classList.add("armed"); el("bBack").textContent = "¿Salir? toca otra vez";
       clearTimeout(armT); armT = setTimeout(function(){ armed=false; el("bBack").classList.remove("armed"); el("bBack").textContent="←"; }, 2500);
     });
+
+    el("resume").addEventListener("pointerdown", function(e){ e.preventDefault(); doResume(); });
 
     var relayout = function(){ requestAnimationFrame(layout); setTimeout(layout, 350); };
     window.addEventListener("resize", relayout);
