@@ -82,6 +82,14 @@
     </div>
   </div>
 
+  <div class="opt">
+    <h3>Gráficos</h3>
+    <div class="seg" id="gfx">
+      <button data-gfx="compat">Compatible<small>WebGL 1 · recomendado en iPhone</small></button>
+      <button data-gfx="modern">Moderno<small>WebGL 2 · mejor en PC/Android</small></button>
+    </div>
+  </div>
+
   <div class="drop" id="drop">…o arrastra aquí un archivo .gba, .gb, .gbc, .nds, .zip o .7z</div>
   <div id="err"></div>
 
@@ -114,6 +122,13 @@
   function paintSeg(){ segBtns.forEach(function(b){ b.classList.toggle("on", b.dataset.core===dsCore); }); }
   segBtns.forEach(function(b){ b.addEventListener("click", function(){ dsCore=b.dataset.core; store.set("dsCore",dsCore); paintSeg(); }); });
   paintSeg();
+
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  var gfx = store.get("gfx") || (isIOS ? "compat" : "modern");
+  var gfxBtns = document.querySelectorAll("#gfx button");
+  function paintGfx(){ gfxBtns.forEach(function(b){ b.classList.toggle("on", b.dataset.gfx===gfx); }); }
+  gfxBtns.forEach(function(b){ b.addEventListener("click", function(){ gfx=b.dataset.gfx; store.set("gfx",gfx); paintGfx(); }); });
+  paintGfx();
 
   var fileInput = document.getElementById("file");
   var pickedSys = null;
@@ -180,6 +195,7 @@
     window.EJS_pathtodata = "data/";
     window.EJS_DEBUG_XX = true;          // carga los scripts sin minificar incluidos aquí
     window.EJS_threads = false;
+    window.EJS_forceLegacyCores = (gfx === "compat");   // WebGL 1: evita la pantalla en blanco de Safari en iPhone
     window.EJS_language = "es-ES";
     window.EJS_color = sys==="gba" ? "#7b5cff" : "#19c3a6";
     window.EJS_startOnLoaded = false;    // el toque en "Jugar" desbloquea el audio
