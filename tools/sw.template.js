@@ -2,6 +2,7 @@
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
 const VERSION = "emu-__VERSION__";
 const FILES = __FILES__;
+let slowUntil = 0;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -34,14 +35,22 @@ self.addEventListener("fetch", (event) => {
   // La página y su código: primero internet (para coger cambios), si no hay, la copia guardada
   const shell = req.mode === "navigate" ? "index.html" : ["index.html", "app.js", "app.css"].find((f) => url.pathname.endsWith("/" + f));
   if (shell) {
+    // Con mala cobertura no se espera más de 2,5 s: se abre la copia guardada y la descarga sigue
+    // en segundo plano para la próxima vez.
+    const net = fetch(req).then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(shell, copy)); }
+      return res;
+    });
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(shell, copy)); }
-          return res;
-        })
-        .catch(() => caches.match(shell, { ignoreSearch: true }))
+      caches.match(shell, { ignoreSearch: true }).then((cached) => {
+        if (!cached) return net;
+        // si la página ya tuvo que tirar de la copia, el resto del código también (sin volver a esperar)
+        if (Date.now() < slowUntil) return cached;
+        const timeout = new Promise((resolve) => setTimeout(() => { slowUntil = Date.now() + 15000; resolve(cached); }, 2500));
+        return Promise.race([net.catch(() => { slowUntil = Date.now() + 15000; return cached; }), timeout]);
+      })
     );
+    event.waitUntil(net.then(() => {}, () => {}));
     return;
   }
 

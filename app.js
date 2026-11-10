@@ -272,6 +272,15 @@
     }
   })();
 
+  // Borrar una vez las copias duplicadas que guardaba EmulatorJS (juegos y motores en caché)
+  if (!store.get("ejsCachePurged")){
+    try {
+      ["EmulatorJS-roms", "EmulatorJS-bios", "EmulatorJS-core"].forEach(function(n){ indexedDB.deleteDatabase(n); });
+      store.set("ejsCachePurged", "1");
+      setTimeout(renderRecent, 1500);       // para que el espacio libre se actualice
+    } catch(e){}
+  }
+
   renderRecent();
 
   /* ---------- Copia de seguridad de las partidas del juego (las guarda EmulatorJS en IndexedDB "/data/saves") ---------- */
@@ -327,72 +336,108 @@
     // ZIP mínimo sin compresión (se abre en Archivos de iOS, Windows, macOS…)
     var CRC = (function(){ var t = new Uint32Array(256); for (var n=0;n<256;n++){ var c=n; for (var k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
     function crc32(u8){ var c = 0xFFFFFFFF; for (var i=0;i<u8.length;i++) c = CRC[(c^u8[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
-    function zip(entries){
-      var enc = new TextEncoder(), parts = [], central = [], off = 0;
-      entries.forEach(function(e){
-        var nm = enc.encode(e.name), crc = crc32(e.data), sz = e.data.length;
-        var h = new DataView(new ArrayBuffer(30));
-        h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(8,0,true);
-        h.setUint32(14,crc,true); h.setUint32(18,sz,true); h.setUint32(22,sz,true); h.setUint16(26,nm.length,true);
-        parts.push(h.buffer, nm, e.data);
-        var c = new DataView(new ArrayBuffer(46));
-        c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true);
-        c.setUint32(16,crc,true); c.setUint32(20,sz,true); c.setUint32(24,sz,true); c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
-        central.push(c.buffer, nm);
-        off += 30 + nm.length + sz;
-      });
-      var csize = central.reduce(function(a,b){ return a + b.byteLength; }, 0);
-      var end = new DataView(new ArrayBuffer(22));
-      end.setUint32(0,0x06054b50,true); end.setUint16(8,entries.length,true); end.setUint16(10,entries.length,true);
-      end.setUint32(12,csize,true); end.setUint32(16,off,true);
-      return new Blob(parts.concat(central, [end.buffer]), {type:"application/zip"});
-    }
-    function inflate(u8){
-      if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("deflate"));
-      var ds = new DecompressionStream("deflate-raw");
-      return new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer().then(function(b){ return new Uint8Array(b); });
-    }
-    function unzip(buf){
-      var dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder(), eocd = -1;
-      for (var i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) if (dv.getUint32(i,true) === 0x06054b50){ eocd = i; break; }
-      if (eocd < 0) return Promise.reject(new Error("zip"));
-      var n = dv.getUint16(eocd+10,true), p = dv.getUint32(eocd+16,true), jobs = [];
-      for (var k = 0; k < n; k++){
-        var method = dv.getUint16(p+10,true), csz = dv.getUint32(p+20,true), nl = dv.getUint16(p+28,true), xl = dv.getUint16(p+30,true), cl = dv.getUint16(p+32,true), lo = dv.getUint32(p+42,true);
-        var name = dec.decode(u8.subarray(p+46, p+46+nl));
-        p += 46 + nl + xl + cl;
-        var start = lo + 30 + dv.getUint16(lo+26,true) + dv.getUint16(lo+28,true), raw = u8.slice(start, start + csz);
-        if (name.endsWith("/") || name.indexOf("..") >= 0 || name.indexOf("__MACOSX") === 0 || /(^|\/)\./.test(name)) continue;
-        jobs.push((method === 0 ? Promise.resolve(raw) : method === 8 ? inflate(raw) : Promise.reject(new Error("método"))).then((function(nm){ return function(data){ return {name: nm.replace(/^\/+/, ""), data: data}; }; })(name)));
+    // CRC32 leyendo por trozos de 2 MB: así no hace falta tener todo el archivo en memoria
+    function crcOf(src){
+      if (!(src instanceof Blob)) return Promise.resolve(crc32(src));
+      var c = 0xFFFFFFFF, pos = 0, CH = 2097152;
+      function step(){
+        if (pos >= src.size) return Promise.resolve((c ^ 0xFFFFFFFF) >>> 0);
+        return src.slice(pos, pos + CH).arrayBuffer().then(function(b){
+          var u = new Uint8Array(b); for (var i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 255] ^ (c >>> 8);
+          pos += CH; return step();
+        });
       }
-      return Promise.all(jobs);
+      return step();
+    }
+    // entries: {name, data: Uint8Array | Blob}. El resultado es un Blob hecho de trozos (no copia los datos grandes).
+    function zip(entries){
+      var enc = new TextEncoder(), parts = [], central = [], off = 0, i = 0;
+      function next(){
+        if (i >= entries.length){
+          var csize = central.reduce(function(a,b){ return a + b.byteLength; }, 0);
+          var end = new DataView(new ArrayBuffer(22));
+          end.setUint32(0,0x06054b50,true); end.setUint16(8,entries.length,true); end.setUint16(10,entries.length,true);
+          end.setUint32(12,csize,true); end.setUint32(16,off,true);
+          return Promise.resolve(new Blob(parts.concat(central, [end.buffer]), {type:"application/zip"}));
+        }
+        var e = entries[i++], data = e.data, sz = data instanceof Blob ? data.size : data.length;
+        return crcOf(data).then(function(crc){
+          var nm = enc.encode(e.name);
+          var h = new DataView(new ArrayBuffer(30));
+          h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(8,0,true);
+          h.setUint32(14,crc,true); h.setUint32(18,sz,true); h.setUint32(22,sz,true); h.setUint16(26,nm.length,true);
+          parts.push(h.buffer, nm, data);
+          var c = new DataView(new ArrayBuffer(46));
+          c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true);
+          c.setUint32(16,crc,true); c.setUint32(20,sz,true); c.setUint32(24,sz,true); c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
+          central.push(c.buffer, nm);
+          off += 30 + nm.length + sz;
+          return next();
+        });
+      }
+      return next();
+    }
+    function inflate(blob){
+      if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("deflate"));
+      return new Response(blob.stream().pipeThrough(new DecompressionStream("deflate-raw"))).blob();
+    }
+    // Lee el índice del .zip y devuelve cada archivo como un trozo (Blob) del original, sin cargarlo entero
+    function unzip(file){
+      var dec = new TextDecoder(), tailStart = Math.max(0, file.size - 66000);
+      return file.slice(tailStart).arrayBuffer().then(function(tb){
+        var dv = new DataView(tb), eocd = -1;
+        for (var i = tb.byteLength - 22; i >= 0; i--) if (dv.getUint32(i,true) === 0x06054b50){ eocd = i; break; }
+        if (eocd < 0) throw new Error("zip");
+        var n = dv.getUint16(eocd+10,true), csize = dv.getUint32(eocd+12,true), coff = dv.getUint32(eocd+16,true);
+        return file.slice(coff, coff + csize).arrayBuffer().then(function(cb){
+          var cd = new DataView(cb), cu = new Uint8Array(cb), p = 0, list = [];
+          for (var k = 0; k < n; k++){
+            var method = cd.getUint16(p+10,true), csz = cd.getUint32(p+20,true), nl = cd.getUint16(p+28,true), xl = cd.getUint16(p+30,true), cl = cd.getUint16(p+32,true), lo = cd.getUint32(p+42,true);
+            var name = dec.decode(cu.subarray(p+46, p+46+nl));
+            p += 46 + nl + xl + cl;
+            if (name.endsWith("/") || name.indexOf("..") >= 0 || name.indexOf("__MACOSX") === 0 || /(^|\/)\./.test(name)) continue;
+            list.push({name: name.replace(/^\/+/, ""), method: method, csz: csz, lo: lo});
+          }
+          // cada entrada: leer su cabecera local para saber dónde empiezan los datos
+          return Promise.all(list.map(function(e){
+            return file.slice(e.lo, e.lo + 30).arrayBuffer().then(function(hb){
+              var hv = new DataView(hb), start = e.lo + 30 + hv.getUint16(26,true) + hv.getUint16(28,true), raw = file.slice(start, start + e.csz);
+              if (e.method === 0) return {name: e.name, blob: raw};
+              if (e.method === 8) return inflate(raw).then(function(b){ return {name: e.name, blob: b}; });
+              throw new Error("método");
+            });
+          }));
+        });
+      });
     }
     // Copia completa: partidas del juego + guardados rápidos, "continuar", biblioteca y ajustes (sin las copias de los juegos)
     function u8(blob){ return blob ? blob.arrayBuffer().then(function(b){ return new Uint8Array(b); }) : Promise.resolve(null); }
-    function buildZip(){
+    function buildZip(full){
       return Promise.all([readAll(), Recent.dumpExtras()]).then(function(r){
         var entries = r[0], x = r[1], files = [], jobs = [];
         var man = {formato: "emulador-gba-nds", version: 1, fecha: new Date().toISOString(), prefs: prefs, meta: [], states: [], slots: []};
         x.meta.forEach(function(m, i){
           var mm = Object.assign({}, m); delete mm.thumb;
-          if (m.thumb){ mm.thumbFile = "_emulador/capturas/" + i + ".png"; jobs.push(u8(m.thumb).then(function(d){ files.push({name: mm.thumbFile, data: d}); })); }
+          if (m.thumb){ mm.thumbFile = "_emulador/capturas/" + i + ".png"; files.push({name: mm.thumbFile, data: m.thumb}); }
           man.meta.push(mm);
         });
-        x.states.forEach(function(st, i){
-          var f = "_emulador/continuar/" + i + ".bin"; man.states.push({id: st.id, ts: st.ts, file: f});
-          jobs.push(u8(st.blob).then(function(d){ files.push({name: f, data: d}); }));
-        });
-        x.slots.forEach(function(sl, i){
-          var f = "_emulador/ranuras/" + i + ".bin", t = sl.thumb ? "_emulador/ranuras/" + i + ".png" : null;
-          man.slots.push({key: sl.key, ts: sl.ts, file: f, thumb: t});
-          jobs.push(u8(sl.blob).then(function(d){ files.push({name: f, data: d}); }));
-          if (t) jobs.push(u8(sl.thumb).then(function(d){ files.push({name: t, data: d}); }));
-        });
+        if (full){
+          x.states.forEach(function(st, i){
+            var f = "_emulador/continuar/" + i + ".bin"; man.states.push({id: st.id, ts: st.ts, file: f});
+            files.push({name: f, data: st.blob});
+          });
+          x.slots.forEach(function(sl, i){
+            var f = "_emulador/ranuras/" + i + ".bin", t = sl.thumb ? "_emulador/ranuras/" + i + ".png" : null;
+            man.slots.push({key: sl.key, ts: sl.ts, file: f, thumb: t});
+            files.push({name: f, data: sl.blob});
+            if (t) files.push({name: t, data: sl.thumb});
+          });
+        }
         return Promise.all(jobs).then(function(){
           if (!entries.length && !man.meta.length) return null;
           files.push({name: "_emulador/datos.json", data: new TextEncoder().encode(JSON.stringify(man))});
           var d = new Date(), stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
-          return new File([zip(entries.concat(files))], "copia-emulador-" + stamp + ".zip", {type:"application/zip"});
+          return zip(entries.concat(files)).then(function(z){ return new File([z], "copia-emulador-" + (full ? "" : "partidas-") + stamp + ".zip", {type:"application/zip"}); });
         });
       });
     }
@@ -410,7 +455,10 @@
     function resetBtn(){ var b = document.getElementById("bkExport"); b.firstChild.nodeValue = "Hacer copia"; }
     function exportAll(){
       if (ready) return share(ready);
-      return buildZip().then(function(file){
+      var full = !document.getElementById("bkLite").classList.contains("on");
+      var b = document.getElementById("bkExport"); b.firstChild.nodeValue = "Preparando…";
+      return buildZip(full).then(function(file){
+        resetBtn();
         if (!file){ showErr("Todavía no hay partidas ni juegos que copiar."); return; }
         return share(file);
       });
@@ -420,23 +468,27 @@
       document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     }
     function importZip(file){
-      return file.arrayBuffer().then(unzip).then(function(entries){
+      return unzip(file).then(function(entries){
         if (!entries.length) throw new Error("vacío");
-        var saves = [], extra = {};
-        entries.forEach(function(e){ if (e.name.indexOf("_emulador/") === 0) extra[e.name] = e.data; else saves.push(e); });
-        var man = null;
-        try { if (extra["_emulador/datos.json"]) man = JSON.parse(new TextDecoder().decode(extra["_emulador/datos.json"])); } catch(e){}
-        var blob = function(f, type){ return f && extra[f] ? new Blob([extra[f]], type ? {type:type} : undefined) : undefined; };
-        var steps = [saves.length ? writeAll(saves) : Promise.resolve(0)];
-        if (man){
-          steps.push(Recent.loadExtras({
-            meta: (man.meta || []).map(function(m){ var mm = Object.assign({}, m); mm.thumb = blob(m.thumbFile, "image/png"); delete mm.thumbFile; return mm; }),
-            states: (man.states || []).filter(function(st){ return extra[st.file]; }).map(function(st){ return {id: st.id, ts: st.ts, blob: blob(st.file)}; }),
-            slots: (man.slots || []).filter(function(sl){ return extra[sl.file]; }).map(function(sl){ return {key: sl.key, ts: sl.ts, blob: blob(sl.file), thumb: blob(sl.thumb, "image/png")}; })
-          }));
-          if (man.prefs){ prefs = Object.assign({}, PREF_DEF, man.prefs); savePrefs(); }
-        }
-        return Promise.all(steps).then(function(){ return {saves: saves.length, games: man ? (man.meta || []).length : 0}; });
+        var saveEntries = [], extra = {};
+        entries.forEach(function(e){ if (e.name.indexOf("_emulador/") === 0) extra[e.name] = e.blob; else saveEntries.push(e); });
+        // las partidas del juego son pequeñas: se leen a memoria para escribirlas donde las busca el emulador
+        var savesP = Promise.all(saveEntries.map(function(e){ return e.blob.arrayBuffer().then(function(b){ return {name: e.name, data: new Uint8Array(b)}; }); }));
+        var manP = extra["_emulador/datos.json"] ? extra["_emulador/datos.json"].text().then(function(t){ try { return JSON.parse(t); } catch(e){ return null; } }) : Promise.resolve(null);
+        return Promise.all([savesP, manP]).then(function(r){
+          var saves = r[0], man = r[1];
+          var blob = function(f, type){ return f && extra[f] ? (type ? new Blob([extra[f]], {type: type}) : extra[f]) : undefined; };
+          var steps = [saves.length ? writeAll(saves) : Promise.resolve(0)];
+          if (man){
+            steps.push(Recent.loadExtras({
+              meta: (man.meta || []).map(function(m){ var mm = Object.assign({}, m); mm.thumb = blob(m.thumbFile, "image/png"); delete mm.thumbFile; return mm; }),
+              states: (man.states || []).filter(function(st){ return extra[st.file]; }).map(function(st){ return {id: st.id, ts: st.ts, blob: new Blob([extra[st.file]])}; }),
+              slots: (man.slots || []).filter(function(sl){ return extra[sl.file]; }).map(function(sl){ return {key: sl.key, ts: sl.ts, blob: new Blob([extra[sl.file]]), thumb: blob(sl.thumb, "image/png")}; })
+            }));
+            if (man.prefs){ prefs = Object.assign({}, PREF_DEF, man.prefs); savePrefs(); }
+          }
+          return Promise.all(steps).then(function(){ return {saves: saves.length, games: man ? (man.meta || []).length : 0}; });
+        });
       });
     }
     return {exportAll:exportAll, importZip:importZip, readAll:readAll};
@@ -445,6 +497,7 @@
   document.getElementById("bkExport").addEventListener("click", function(){
     Backup.exportAll().catch(function(){ showErr("No se pudo hacer la copia."); });
   });
+  document.getElementById("bkLite").addEventListener("click", function(){ this.classList.toggle("on"); });
   document.getElementById("bkImport").addEventListener("click", function(){ var f = document.getElementById("bkFile"); f.value = ""; f.click(); });
   document.getElementById("bkFile").addEventListener("change", function(){
     var f = this.files[0]; if (!f) return;
@@ -515,6 +568,8 @@
     window.EJS_backgroundColor = "#000";
     window.EJS_Buttons = { netplay:false, cheat:false, cacheManager:false, exitEmulation:false, fullscreen:false, screenRecord:false, quickSave:false, quickLoad:false, screenshot:false, contextMenu:false };
     window.EJS_defaultOptions = { "save-state-location": "browser" };
+    // EmulatorJS guardaba su propia copia de cada juego (duplicando el espacio): la biblioteca ya tiene la suya
+    window.EJS_disableDatabases = true;
     // Ajustes de EmulatorJS que no sirven aquí o que ya gestiona nuestro menú
     window.EJS_hideSettings = ["screenshotSource","screenshotFormat","screenshotUpscale","screenRecordFPS","screenRecordFormat",
       "screenRecordUpscale","screenRecordVideoBitrate","screenRecordAudioBitrate","menubarBehavior","keyboardInput","altKeyboardInput",

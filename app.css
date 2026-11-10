@@ -65,6 +65,10 @@
   .seg button.on{background:var(--nds);color:#04211c}
   .seg small{display:block;font-weight:400;font-size:11px;opacity:.85;margin-top:2px}
   .seg.bk button{background:#1d2136;color:var(--text)}
+  .chk{display:block;width:100%;margin-top:10px;border:0;background:transparent;color:var(--muted);font:13px Inter,sans-serif;text-align:left;padding:4px 2px;cursor:pointer}
+  .chk::before{content:"☐ ";font-size:15px}
+  .chk.on{color:var(--text)}
+  .chk.on::before{content:"☑ "}
   .seg.bk button:active{background:#262b45}
   .drop{margin-top:14px;padding:18px;border:2px dashed var(--line);border-radius:16px;text-align:center;color:var(--muted);font-size:13px}
   .drop.over{border-color:var(--gba);color:var(--text)}
