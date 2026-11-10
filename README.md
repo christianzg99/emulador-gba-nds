@@ -1,4 +1,4 @@
-# Emulador GBA y NDS
+# Emulador Zeta
 
 Emulador web de Game Boy Advance y Nintendo DS. Las ROMs se cargan desde tu dispositivo y no se suben a ningún sitio.
 

@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Emulador GBA y NDS</title>
+<title>Emulador Zeta</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="GBA & NDS">
+<meta name="apple-mobile-web-app-title" content="Emulador Zeta">
 <meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
 <body>
 
 <section id="home">
-  <div class="logo"><span>GBA</span> &amp; <b>NDS</b><br>Emulador</div>
+  <div class="logo"><span class="zmark">Z</span><span class="ztxt"><small>Emulador</small>ZETA</span></div>
 
   <div id="pwaTip" class="tip" style="display:none">
     <b>Para que iOS no borre tus partidas</b>
@@ -123,6 +123,10 @@
             <button id="mPadMap"><i>🎮</i><span>Mando</span></button>
             <button id="mAdv"><i>⚙</i><span>Avanzado</span></button>
           </div>
+          <div class="acts two">
+            <button id="mShot"><i>📷</i><span>Captura</span></button>
+            <button id="mCheats"><i>✦</i><span>Trucos</span></button>
+          </div>
 
           <h4>Guardado rápido</h4>
           <div class="slots" id="slots"></div>
@@ -157,9 +161,30 @@
           <label class="sl">Tamaño <input type="range" id="padSize" min="70" max="140" step="5"><output id="padSizeV"></output></label>
           <label class="sl">Opacidad <input type="range" id="padOp" min="20" max="100" step="5"><output id="padOpV"></output></label>
           <div class="seg"><button id="padEdit">Mover botones</button><button id="padReset">Restablecer</button></div>
+          <div class="seg toggles" id="optSeg2"><button data-o="autoDim">Botones transparentes en pantalla completa (se iluminan al tocarlos)</button></div>
         </div>
       </div>
     </div>
+
+    <div id="cheats" class="sheetwrap">
+      <div class="sheet">
+        <div class="sh-head"><b>Trucos</b><button class="sh-x" data-close>✕</button></div>
+        <div class="sh-body">
+          <p class="hint">Códigos GameShark, Action Replay o CodeBreaker. Se guardan para este juego. Algunos trucos pueden colgar el juego: guarda antes de activarlos.</p>
+          <div id="cheatList"></div>
+          <h4>Añadir truco</h4>
+          <input id="cheatName" class="inp" placeholder="Nombre (p. ej. Caramelos raros)" autocomplete="off">
+          <textarea id="cheatCode" class="inp" rows="3" placeholder="Código (una línea por cada parte)" autocapitalize="characters" autocomplete="off" spellcheck="false"></textarea>
+          <div class="seg"><button id="cheatAdd">Añadir y activar</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="errbox"><div class="box">
+      <div class="t">No se pudo abrir el juego</div>
+      <div class="w" id="errMsg"></div>
+      <button id="errBack" class="pri">Volver al inicio</button>
+    </div></div>
 
     <div id="adv" class="sheetwrap">
       <div class="sheet">

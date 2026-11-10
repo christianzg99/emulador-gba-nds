@@ -437,14 +437,14 @@
           if (!entries.length && !man.meta.length) return null;
           files.push({name: "_emulador/datos.json", data: new TextEncoder().encode(JSON.stringify(man))});
           var d = new Date(), stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
-          return zip(entries.concat(files)).then(function(z){ return new File([z], "copia-emulador-" + (full ? "" : "partidas-") + stamp + ".zip", {type:"application/zip"}); });
+          return zip(entries.concat(files)).then(function(z){ return new File([z], "copia-emulador-zeta-" + (full ? "" : "partidas-") + stamp + ".zip", {type:"application/zip"}); });
         });
       });
     }
     var ready = null;
     function share(file){
       if (navigator.canShare && navigator.canShare({files:[file]})){
-        return navigator.share({files:[file], title:"Copia del emulador"}).then(function(){ ready = null; resetBtn(); }).catch(function(e){
+        return navigator.share({files:[file], title:"Copia de Emulador Zeta"}).then(function(){ ready = null; resetBtn(); }).catch(function(e){
           if (e && e.name === "NotAllowedError"){        // iOS: compartir necesita un toque reciente
             ready = file; var b = document.getElementById("bkExport"); b.firstChild.nodeValue = "Compartir copia"; showOk("Copia preparada (" + mb(file.size) + "). Toca «Compartir copia».");
           } else if (!e || e.name !== "AbortError"){ download(file); }
@@ -548,6 +548,7 @@
 
   function boot(file, sys, name){
     applyAudioSession();
+    patchEngine();
     var core = sys==="gba" ? "mgba" : dsCore;
     document.getElementById("home").style.display="none";
     document.getElementById("play").style.display="block";
@@ -589,12 +590,12 @@
   var el = function(id){ return document.getElementById(id); };
 
   function gm(){ return window.EJS_emulator && window.EJS_emulator.gameManager; }
-  function key(k, v){ var g = gm(); if (g) try { g.simulateInput(0, k, v); } catch(e){} }
+  function key(k, v){ var g = gm(); if (g) try { (g.__sim || g.simulateInput).call(g, 0, k, v); } catch(e){} }
 
   function toast(msg, ms){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");}, ms || 1600); }
 
   /* ---------- Preferencias (se recuerdan en este dispositivo) ---------- */
-  var PREF_DEF = { landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
+  var PREF_DEF = { autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
   var prefs = (function(){ try { return Object.assign({}, PREF_DEF, JSON.parse(store.get("prefs") || "{}")); } catch(e){ return Object.assign({}, PREF_DEF); } })();
   if (!prefs.offsets || !prefs.offsets.portrait) prefs.offsets = {portrait:{}, landscape:{}};
   function savePrefs(){ store.set("prefs", JSON.stringify(prefs)); }
@@ -714,6 +715,7 @@
       n.style.scale = String(sc);
     });
     pad.style.opacity = String((prefs.padOp || 100) / 100);
+    pad.classList.toggle("dim", !!prefs.autoDim && landscape && SYS === "gba" && prefs.landMode !== "normal");
   }
 
   // Botones de acción: GBA = A/B en diagonal; DS = rombo X/A/B/Y
@@ -784,12 +786,26 @@
       b.el.classList.toggle("on", !!v);
     });
   }
+  // Pulsaciones que llegan del mando Bluetooth o del teclado (las gestiona EmulatorJS)
+  var extHeld = {};
+  function hookExternalInput(){
+    var g = gm(); if (!g || g.__sim) return;
+    g.__sim = g.simulateInput;
+    g.simulateInput = function(p, k, v){
+      if (p === 0 && (k === 8 || k === 0) && prefs.turbo[k]){
+        extHeld[k] = v > 0;
+        if (!v) g.__sim.call(g, p, k, 0);
+        return;                                    // con turbo activado, la pulsación la hace el bucle de turbo
+      }
+      return g.__sim.call(g, p, k, v);
+    };
+  }
   // Turbo: mientras se mantiene el botón, se pulsa y suelta solo ~10 veces por segundo
   var turboPhase = 0;
   setInterval(function(){
     if (!gameStarted) return;
     turboPhase ^= 1;
-    Object.keys(prefs.turbo).forEach(function(k){ if (prefs.turbo[k] && faceState[k]) key(+k, turboPhase); });
+    Object.keys(prefs.turbo).forEach(function(k){ if (prefs.turbo[k] && (faceState[k] || extHeld[k])) key(+k, turboPhase); });
   }, 50);
   function bindFace(){
     var f = el("face");
@@ -954,6 +970,8 @@
   function afterStart(){
     var E = E_();
     moveAdvanced();
+    hookExternalInput();
+    setTimeout(applyCheats, 800);
     applyFF(); applyFilter();
     if (CORE === "melonds") try { gm().setVariable("melonds_mic_input", "Blow Noise"); } catch(e){}
     setTimeout(saveThumb, 4000);
@@ -990,7 +1008,7 @@
 
   /* ---------- Menú ☰ ---------- */
   var sheetPaused = false, keepPaused = false;
-  function anySheet(){ return el("sheet").classList.contains("show") || el("adv").classList.contains("show"); }
+  function anySheet(){ return ["sheet","adv","cheats"].some(function(id){ return el(id).classList.contains("show"); }); }
   function pauseForSheet(){
     var E = E_();
     if (E && !E.paused){ try { E.pause(); sheetPaused = true; } catch(e){} }
@@ -1011,7 +1029,7 @@
     shot().then(function(b){ menuShot = b; if (el("sheet").classList.contains("show")) pauseForSheet(); });
   }
   function closeSheets(){
-    el("sheet").classList.remove("show");
+    el("sheet").classList.remove("show"); el("cheats").classList.remove("show");
     if (el("adv").classList.contains("show")){ el("adv").classList.remove("show"); try { E_().closeSettingsMenu(); } catch(e){} }
     resumeAfterSheet();
   }
@@ -1033,7 +1051,7 @@
     paintSegV("landSeg", prefs.landMode);
     el("landOpts").style.display = SYS === "gba" ? "" : "none";
     document.querySelectorAll("#turboSeg button").forEach(function(b){ b.classList.toggle("on", !!prefs.turbo[b.dataset.k]); });
-    document.querySelectorAll("#optSeg button").forEach(function(b){ b.classList.toggle("on", !!prefs[b.dataset.o]); });
+    document.querySelectorAll("#optSeg button, #optSeg2 button").forEach(function(b){ b.classList.toggle("on", !!prefs[b.dataset.o]); });
     el("dsOpts").style.display = SYS === "nds" ? "" : "none";
     el("padSize").value = prefs.padSize; el("padSizeV").textContent = prefs.padSize + "%";
     el("padOp").value = prefs.padOp; el("padOpV").textContent = prefs.padOp + "%";
@@ -1102,7 +1120,7 @@
   function bindMenu(){
     document.querySelectorAll("[data-close]").forEach(function(b){ b.addEventListener("click", closeSheets); });
     // Cerrar tocando fuera, pero solo si el toque empezó fuera (si no, el mismo toque que abre el menú lo cerraría)
-    ["sheet","adv"].forEach(function(id){
+    ["sheet","adv","cheats"].forEach(function(id){
       var downOut = false;
       el(id).addEventListener("pointerdown", function(e){ downOut = e.target === el(id); });
       el(id).addEventListener("click", function(e){ if (e.target === el(id) && downOut) closeSheets(); downOut = false; });
@@ -1116,6 +1134,9 @@
     };
     el("mPadMap").onclick = function(){ el("sheet").classList.remove("show"); try { E_().controlMenu.style.display = ""; } catch(e){} resumeAfterSheet(); };
     el("mAdv").onclick = openAdvanced;
+    el("mShot").onclick = shareShot;
+    el("mCheats").onclick = openCheats;
+    el("cheatAdd").onclick = addCheat;
     // Partida en .sav (compatible con otros emuladores)
     el("savExport").onclick = function(){
       try {
@@ -1146,7 +1167,8 @@
         keepPaused = false; closeSheets(); toast("Partida importada: el juego se ha reiniciado", 3000);
       }).catch(function(){ toast("No se pudo importar ese archivo"); });
     };
-    document.querySelectorAll("#optSeg button").forEach(function(b){ b.onclick = function(){
+    document.querySelectorAll("#optSeg button, #optSeg2 button").forEach(function(b){ b.onclick = function(){
+      if (b.dataset.o === "autoDim"){ prefs.autoDim = !prefs.autoDim; savePrefs(); paintMenu(); applyPadPrefs(); return; }
       prefs[b.dataset.o] = !prefs[b.dataset.o]; savePrefs(); paintMenu();
       if (b.dataset.o === "silentSound") applyAudioSession();
       if (b.dataset.o === "haptics" && prefs.haptics) hap();
@@ -1216,6 +1238,150 @@
   stage.addEventListener("pointerdown", function(e){
     if (pad.classList.contains("gp-hidden") && e.pointerType === "touch"){ pad.classList.remove("gp-hidden"); }
   }, true);
+
+  /* ---------- Ajustes del motor antes de arrancar ---------- */
+  function patchEngine(){
+    var tries = 0, t = setInterval(function(){
+      tries++;
+      // Sin el aviso "Fast-Forward" en pantalla (ya se ve en el botón »)
+      if (window.EJS_GameManager && !window.EJS_GameManager.__zeta){
+        var P = window.EJS_GameManager.prototype, orig = P.getRetroArchCfg;
+        P.getRetroArchCfg = function(){ return orig.call(this) + "notification_show_fast_forward = \"false\"\n"; };
+        window.EJS_GameManager.__zeta = true;
+      }
+      // Errores al abrir un juego: mensaje propio en español
+      if (window.EmulatorJS && !window.EmulatorJS.__zeta){
+        var EP = window.EmulatorJS.prototype, origErr = EP.startGameError;
+        EP.startGameError = function(msg){ try { origErr.call(this, msg); } catch(e){} showGameError(msg); };
+        window.EmulatorJS.__zeta = true;
+      }
+      if ((window.EJS_GameManager && window.EmulatorJS) || tries > 600) clearInterval(t);
+    }, 25);
+  }
+  function showGameError(msg){
+    var m = String(msg || ""), txt;
+    if (/red|network/i.test(m)) txt = "No se pudo descargar una parte del emulador. Comprueba tu conexión e inténtalo de nuevo.";
+    else if (/gráficos|graphics/i.test(m)) txt = "Tu navegador no ha podido iniciar los gráficos. Prueba a cambiar «Gráficos» en la pantalla de inicio.";
+    else if (/núcleo|core/i.test(m)) txt = "No se pudo cargar el motor del emulador. Comprueba tu conexión e inténtalo de nuevo.";
+    else txt = "El archivo puede estar dañado o no ser un juego de " + (SYS === "gba" ? "GBA, GB o GBC" : "Nintendo DS") + "." +
+      (SYS === "nds" ? "\nTambién puedes probar el otro motor de DS en la pantalla de inicio." : "");
+    el("errMsg").textContent = txt;
+    el("errbox").classList.add("show");
+    el("errBack").onclick = function(){ location.reload(); };
+  }
+
+  /* ---------- Captura de pantalla para compartir ---------- */
+  function shareShot(){
+    var src = menuShot;
+    if (!src){ toast("No se pudo hacer la captura. Cierra el menú, deja correr el juego un momento y vuelve a probar.", 3500); return; }
+    createImageBitmap(src).then(function(bm){
+      var k = Math.max(2, Math.round(1080 / Math.max(bm.width, bm.height)));      // ampliada sin difuminar
+      var c = document.createElement("canvas"); c.width = bm.width * k; c.height = bm.height * k;
+      var x = c.getContext("2d"); x.imageSmoothingEnabled = false; x.drawImage(bm, 0, 0, c.width, c.height);
+      c.toBlob(function(b){
+        var d = new Date(), nm = (window.EJS_gameName || "captura").slice(0, 60) + " " + d.toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".png";
+        var f = new File([b], nm, {type:"image/png"});
+        if (navigator.canShare && navigator.canShare({files:[f]})) navigator.share({files:[f], title:"Emulador Zeta"}).catch(function(){});
+        else { var a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = nm; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); }, 3000); }
+      }, "image/png");
+    }).catch(function(){ toast("No se pudo hacer la captura"); });
+  }
+
+  /* ---------- Trucos (se guardan por juego) ---------- */
+  var cheats = [];
+  function loadCheats(){
+    return Recent.list().then(function(items){
+      var me = items.filter(function(i){ return i.id === CURRENT_ID; })[0];
+      cheats = (me && me.cheats) || []; return cheats;
+    });
+  }
+  function saveCheats(){ return Recent.update(CURRENT_ID, function(r){ r.cheats = cheats; }); }
+  function applyCheats(){
+    loadCheats().then(function(){
+      var g = gm(); if (!g) return;
+      try { g.resetCheat(); } catch(e){}
+      cheats.forEach(function(c, i){ if (c.on) try { g.setCheat(i, 1, c.code); } catch(e){} });
+    });
+  }
+  function renderCheats(){
+    var box = el("cheatList"); box.innerHTML = "";
+    if (!cheats.length){ box.innerHTML = '<div class="nocheat">Todavía no has añadido trucos para este juego.</div>'; return; }
+    cheats.forEach(function(c, i){
+      var r = document.createElement("div"); r.className = "cheat";
+      r.innerHTML = '<div class="cn"><b></b><code></code></div><button class="tg"></button><button class="del">Borrar</button>';
+      r.querySelector("b").textContent = c.name; r.querySelector("code").textContent = c.code.replace(/\n/g, " ");
+      var tg = r.querySelector(".tg"); tg.textContent = c.on ? "Activo" : "Apagado"; tg.classList.toggle("on", !!c.on);
+      tg.onclick = function(){ c.on = !c.on; saveCheats().then(applyCheats); renderCheats(); };
+      var armed = false;
+      r.querySelector(".del").onclick = function(){
+        if (!armed){ armed = true; this.textContent = "¿Seguro?"; return; }
+        cheats.splice(i, 1); saveCheats().then(applyCheats); renderCheats();
+      };
+      box.appendChild(r);
+    });
+  }
+  function openCheats(){
+    loadCheats().then(function(){ renderCheats(); el("sheet").classList.remove("show"); el("cheats").classList.add("show"); });
+  }
+  function addCheat(){
+    var name = el("cheatName").value.trim(), code = el("cheatCode").value.trim().toUpperCase().replace(/[ \t]+/g, " ").replace(/\n+/g, "\n");
+    if (!code){ toast("Escribe el código del truco"); return; }
+    cheats.push({name: name || "Truco " + (cheats.length + 1), code: code, on: true});
+    el("cheatName").value = ""; el("cheatCode").value = "";
+    saveCheats().then(applyCheats); renderCheats(); toast("Truco añadido y activado");
+  }
+
+  /* ---------- Menú con el mando: cruceta para moverse, A para elegir, B para volver ---------- */
+  var gpPrev = {}, gpFocus = -1;
+  function gpFocusables(){
+    var open = ["cheats","adv","sheet","errbox"].map(el).filter(function(n){ return n.classList.contains("show"); })[0];
+    if (!open) return [];
+    return Array.prototype.filter.call(open.querySelectorAll("button, input[type=range], .ejs_settings_main_bar, .ejs_option_row, .ejs_back_button"),
+      function(n){ return n.offsetParent !== null && !n.disabled; });
+  }
+  function gpMark(list){
+    document.querySelectorAll(".gpfocus").forEach(function(n){ n.classList.remove("gpfocus"); });
+    if (list[gpFocus]){ list[gpFocus].classList.add("gpfocus"); list[gpFocus].scrollIntoView({block:"nearest"}); }
+  }
+  setInterval(function(){
+    if (!gameStarted || !navigator.getGamepads || !anySheet() && !el("errbox").classList.contains("show")){ gpFocus = -1; return; }
+    var now = {};
+    try { Array.prototype.forEach.call(navigator.getGamepads(), function(gp){
+      if (!gp || !gp.buttons) return;
+      [0,1,12,13,14,15].forEach(function(i){ if (gp.buttons[i] && gp.buttons[i].pressed) now[i] = 1; });
+    }); } catch(e){}
+    var hit = function(i){ return now[i] && !gpPrev[i]; };
+    var list = gpFocusables();
+    if (list.length){
+      if (gpFocus < 0 || gpFocus >= list.length){ gpFocus = 0; gpMark(list); }
+      var cur = list[gpFocus];
+      if (hit(13)){ gpFocus = Math.min(list.length - 1, gpFocus + 1); gpMark(list); }
+      if (hit(12)){ gpFocus = Math.max(0, gpFocus - 1); gpMark(list); }
+      if ((hit(14) || hit(15)) && cur && cur.type === "range"){
+        cur.value = +cur.value + (hit(15) ? 1 : -1) * (+cur.step || 1); cur.dispatchEvent(new Event("input"));
+      } else if (hit(15)){ gpFocus = Math.min(list.length - 1, gpFocus + 1); gpMark(list); }
+      else if (hit(14)){ gpFocus = Math.max(0, gpFocus - 1); gpMark(list); }
+      if (hit(0) && cur){ cur.click(); gpFocus = -1; setTimeout(function(){ gpMark(gpFocusables()); }, 50); }
+    }
+    if (hit(1)){
+      if (el("cheats").classList.contains("show") || el("adv").classList.contains("show")){ closeSheets(); }
+      else closeSheets();
+      gpFocus = -1;
+    }
+    gpPrev = now;
+  }, 80);
+
+  // Se iluminan al tocarlos (cuando están atenuados en pantalla completa)
+  pad.addEventListener("pointerdown", function(e){
+    var n = e.target.closest("#pad > *"); if (!n) return;
+    clearTimeout(n.__lt); n.classList.add("lit");
+  }, true);
+  ["pointerup","pointercancel"].forEach(function(ev){
+    pad.addEventListener(ev, function(e){
+      var n = e.target.closest("#pad > *"); if (!n) return;
+      clearTimeout(n.__lt); n.__lt = setTimeout(function(){ n.classList.remove("lit"); }, 700);
+    }, true);
+  });
 
   function setupPad(sys, core){
     SYS = sys; CORE = core;
