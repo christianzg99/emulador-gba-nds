@@ -1,6 +1,6 @@
 // Service worker: permite abrir el emulador sin conexión.
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
-const VERSION = "emu-fadfd454d2";
+const VERSION = "emu-a4832be3cb";
 const FILES = [
   "./",
   "index.html",
@@ -55,6 +55,16 @@ self.addEventListener("fetch", (event) => {
         if (res.ok) c.put(req, res.clone());
         return res;
       })))
+    );
+    return;
+  }
+  // Tipografías de Google Fonts: se guardan para que la app se vea igual sin conexión
+  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
+    event.respondWith(
+      caches.open("fonts-v1").then((c) => c.match(req).then((hit) => {
+        const net = fetch(req).then((res) => { if (res.ok) c.put(req, res.clone()); return res; });
+        return hit || net;
+      }))
     );
     return;
   }

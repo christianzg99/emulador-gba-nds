@@ -30,6 +30,16 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+  // Tipografías de Google Fonts: se guardan para que la app se vea igual sin conexión
+  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
+    event.respondWith(
+      caches.open("fonts-v1").then((c) => c.match(req).then((hit) => {
+        const net = fetch(req).then((res) => { if (res.ok) c.put(req, res.clone()); return res; });
+        return hit || net;
+      }))
+    );
+    return;
+  }
   if (url.origin !== location.origin) return;
 
   // La página y su código: primero internet (para coger cambios), si no hay, la copia guardada

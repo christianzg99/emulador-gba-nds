@@ -163,7 +163,7 @@
     var h = Math.round(m/60); if (h < 24) return "hace " + h + " h";
     var d = Math.round(h/24); return d === 1 ? "ayer" : "hace " + d + " días";
   }
-  function mb(b){ return b >= 1048576 ? (b >= 104857600 ? Math.round(b/1048576) : (b/1048576).toFixed(1).replace(".0","")) + " MB" : Math.max(1, Math.round(b/1024)) + " KB"; }
+  function mb(b){ if (b >= 1073741824) return (b/1073741824).toFixed(1).replace(".0","").replace(".", ",") + " GB"; return b >= 1048576 ? (b >= 104857600 ? Math.round(b/1048576) : (b/1048576).toFixed(1).replace(".0","")) + " MB" : Math.max(1, Math.round(b/1024)) + " KB"; }
   function dur(secs){
     var m = Math.floor((secs||0) / 60), h = Math.floor(m / 60);
     return h ? h + " h " + (m % 60) + " min" : m ? m + " min" : "menos de 1 min";
@@ -196,8 +196,9 @@
         b.innerHTML = '<div class="tag '+it.sys+'"><b>'+label+'</b></div><div class="txt"><div class="nm"></div><div class="mt"></div></div>' +
           '<div class="fav'+(it.fav?' on':'')+'" aria-label="Favorito">★</div><div class="more" aria-label="Opciones">⋯</div>';
         b.querySelector(".nm").textContent = it.name.replace(/\.[^.]+$/, "");
-        var meta = [it.playTime ? dur(it.playTime) + " jugado" : null, ago(it.last), mb(s.rom + s.extra)].filter(Boolean).join(" · ");
-        b.querySelector(".mt").textContent = hasRom ? meta : "Falta el juego: tócalo para buscarlo en Archivos";
+        var mt = b.querySelector(".mt");
+        if (hasRom) [it.playTime ? dur(it.playTime) + " jugado" : "Sin jugar aún", ago(it.last), mb(s.rom + s.extra)].forEach(function(t){ var x = document.createElement("span"); x.textContent = t; mt.appendChild(x); });
+        else mt.textContent = "Falta el archivo del juego: tócalo para elegirlo";
         // carátula oficial; si no hay, la última captura; si no, la etiqueta
         var tag = b.querySelector(".tag"), img = new Image();
         img.alt = ""; img.crossOrigin = "anonymous"; img.onload = function(){ tag.classList.add("art"); tag.appendChild(img); };
@@ -220,18 +221,46 @@
         ul.appendChild(b);
       });
       renderStorage(items, sz);
+      renderResume(items, sz);
     });
+  }
+  // La pieza grande del inicio: el último juego al que has jugado
+  var rcUrl = null;
+  function renderResume(items, sz){
+    var card = document.getElementById("resumeCard");
+    var last = items.filter(function(i){ return (sz[i.id] || {}).rom > 0; }).sort(function(a, b){ return b.last - a.last; })[0];
+    document.getElementById("addTitle").textContent = items.length ? "Abrir otro juego" : "Abre tu primer juego";
+    if (!last){ card.hidden = true; return; }
+    card.hidden = false;
+    card.querySelector(".rc-name").textContent = last.name.replace(/\.[^.]+$/, "");
+    card.querySelector(".rc-meta").textContent = (last.playTime ? dur(last.playTime) + " jugado, " : "") + "última vez " + ago(last.last);
+    var art = card.querySelector(".rc-art"); art.className = "rc-art"; art.style.backgroundImage = ""; art.innerHTML = "<b>" + (last.sys === "gba" ? "GBA" : "NDS") + "</b>";
+    var img = new Image(); img.crossOrigin = "anonymous";
+    img.onload = function(){ art.innerHTML = ""; art.style.backgroundImage = 'url("' + img.src + '")'; };
+    img.onerror = function(){
+      if (!last.thumb) return;
+      if (rcUrl) URL.revokeObjectURL(rcUrl);
+      rcUrl = URL.createObjectURL(last.thumb); art.innerHTML = ""; art.classList.add("shot"); art.style.backgroundImage = 'url("' + rcUrl + '")';
+    };
+    img.src = artUrl(last);
+    card.querySelector(".rc-play").onclick = function(){
+      var btn = this; btn.textContent = "Cargando…"; btn.disabled = true;
+      Recent.get(last.id).then(function(blob){
+        if (!blob){ btn.textContent = "Continuar"; btn.disabled = false; showErr("No he encontrado ese juego guardado. Ábrelo de nuevo desde Archivos."); return; }
+        launch(new File([blob], last.name), last.sys);
+      }).catch(function(){ btn.textContent = "Continuar"; btn.disabled = false; showErr("No se pudo abrir. Ábrelo de nuevo desde Archivos."); });
+    };
   }
   function renderStorage(items, sz){
     var total = 0; Object.keys(sz).forEach(function(k){ total += sz[k].rom + sz[k].extra; });
     var elx = document.getElementById("libStore");
-    var txt = items.length + (items.length === 1 ? " juego" : " juegos") + " · " + mb(total);
+    var txt = items.length + (items.length === 1 ? " juego, " : " juegos, ") + mb(total);
     elx.textContent = txt;
     try {
       navigator.storage.estimate().then(function(e){
         if (!e || !e.quota) return;
         var free = e.quota - e.usage;
-        elx.textContent = txt + " · quedan " + mb(free);
+        elx.innerHTML = ""; elx.append(txt, document.createElement("br"), "Quedan " + mb(free) + " libres");
         elx.classList.toggle("warn", free < 300 * 1048576);
       });
     } catch(e){}
@@ -504,7 +533,7 @@
     Backup.importZip(f).then(function(r){
       renderRecent();
       showOk("Copia restaurada: " + r.saves + (r.saves === 1 ? " partida" : " partidas") + (r.games ? " y " + r.games + (r.games === 1 ? " juego" : " juegos") + " con sus guardados rápidos" : "") +
-        "." + (r.games ? " Si un juego aparece con «Falta el juego», tócalo y elige su archivo." : ""));
+        "." + (r.games ? " Si un juego aparece como «Falta el archivo del juego», tócalo y elígelo." : ""));
     })
       .catch(function(){ showErr("Ese archivo no parece una copia de partidas válida."); });
   });
@@ -551,6 +580,7 @@
     patchEngine();
     var core = sys==="gba" ? "mgba" : dsCore;
     document.getElementById("home").style.display="none";
+    var aura = document.getElementById("aura"); if (aura) aura.remove();          // no gastar batería con el fondo animado
     document.getElementById("play").style.display="block";
     document.documentElement.style.background = document.body.style.background = "#000";
     setupPad(sys, core);
@@ -650,10 +680,11 @@
 
     if (!landscape){
       // Vertical: pantalla arriba a todo el ancho, mandos debajo
-      var maxH = H - 230;                              // deja sitio mínimo para los mandos
+      var topGap = 14;                                 // iOS difumina el borde superior: un poco de aire
+      var maxH = H - 230 - topGap;                     // deja sitio mínimo para los mandos
       sw = W; sh = W / a;
       if (sh > maxH){ sh = Math.max(maxH, H*0.45); sw = sh * a; if (sw > W){ sw = W; sh = W/a; } }
-      sx = (W - sw)/2; sy = 0;
+      sx = (W - sw)/2; sy = topGap;
       var top = sy + sh, ph = H - top;                 // zona de mandos
       var size = Math.max(112, Math.min(170, ph - 120, W*0.42));
       var cy = top + 56 + Math.min((ph - 56 - 56)/2, size/2 + 40);             // centro vertical entre la fila L/R y la fila inferior
@@ -822,6 +853,17 @@
     node.addEventListener("pointerup", end); node.addEventListener("pointercancel", end); node.addEventListener("lostpointercapture", end);
     releasers.push(end);
   }
+  // iOS hace zoom con un doble toque rápido aunque la página lo prohíba: lo bloqueamos durante el juego
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function(e){
+    if (!started) return;
+    var now = Date.now();
+    if (now - lastTouchEnd < 350 && e.cancelable && !e.target.closest(".sheet, #errbox, #cont, #editbar")) e.preventDefault();
+    lastTouchEnd = now;
+  }, {passive:false});
+  ["gesturestart","gesturechange","dblclick"].forEach(function(ev){
+    document.addEventListener(ev, function(e){ if (started) e.preventDefault(); }, {passive:false});
+  });
   var releasers = [];
   // Red de seguridad contra botones "atascados": si iOS no avisa de que se ha levantado un dedo
   // (gestos del sistema, notificaciones…), al no quedar ningún dedo en la pantalla se suelta todo.
