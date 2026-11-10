@@ -1,11 +1,15 @@
 // Service worker: permite abrir el emulador sin conexión.
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
-const VERSION = "emu-4ac830aa19";
+const VERSION = "emu-fadfd454d2";
 const FILES = [
   "./",
   "index.html",
   "app.css",
   "app.js",
+  "manifest.webmanifest",
+  "icons/icon-192.png",
+  "icons/apple-touch-icon.png",
+  "icons/favicon-32.png",
   "data/loader.js",
   "data/emulator.min.js",
   "data/emulator.min.css",

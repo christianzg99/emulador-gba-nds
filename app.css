@@ -178,7 +178,7 @@
 
   /* Logo: Z con energía */
   .logo{display:flex;align-items:center;gap:14px;font-family:Inter,sans-serif;margin:6px 0 24px}
-  .zmark{display:grid;place-items:center;width:58px;height:58px;border-radius:16px;background:radial-gradient(circle at 30% 25%,#ffd36b,#ff7a1a 55%,#d6380f);color:#fff;font:900 40px/1 Inter,sans-serif;transform:skewX(-8deg);text-shadow:0 2px 0 #8a1d05,0 0 14px rgba(255,180,60,.6);box-shadow:0 0 0 2px #2a1206 inset,0 6px 18px rgba(255,110,20,.35)}
+  .zmark{display:block;width:62px;height:62px;border-radius:15px;box-shadow:0 6px 18px rgba(255,110,20,.3)}
   .ztxt{display:flex;flex-direction:column;line-height:1}
   .ztxt small{font:600 13px Inter,sans-serif;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
   .ztxt{font:900 30px Inter,sans-serif;letter-spacing:4px;background:linear-gradient(90deg,#ffd36b,#ff7a1a);-webkit-background-clip:text;background-clip:text;color:transparent}
