@@ -6,7 +6,7 @@
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
   body{padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);overflow-x:hidden}
   #home{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 34px) 18px 40px;overflow-x:hidden}
-  .logo{font-family:"Press Start 2P",monospace;font-size:18px;line-height:1.5;letter-spacing:.5px;margin:6px 0 4px}
+  .logo{font-family:"Press Start 2P",monospace;font-size:18px;line-height:1.5;letter-spacing:.5px;margin:6px 0 24px}
   .logo span{color:var(--gba)} .logo b{color:var(--nds);font-weight:400}
   .sub{color:var(--muted);font-size:14px;margin:0 0 24px}
   .cards{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
@@ -84,6 +84,9 @@
   #game .ejs_canvas{position:absolute!important;left:var(--sx)!important;top:var(--sy)!important;width:var(--sw)!important;height:var(--sh)!important;transform:scaleX(var(--stx,1))!important;transform-origin:0 0!important}
   /* Sustituimos el mando táctil de EmulatorJS por el nuestro */
   #game .ejs_virtualGamepad_parent,#game .ejs_virtualGamepad_open{display:none!important}
+  /* Botón "Jugar" y texto de carga: en el centro de la pantalla del juego, por encima de los botones */
+  #game .ejs_start_button{position:fixed!important;top:calc(env(safe-area-inset-top) + var(--sy) + var(--sh) / 2)!important;bottom:auto!important;left:calc(env(safe-area-inset-left) + var(--sx) + var(--sw) / 2)!important;transform:translate(-50%,-50%)!important;z-index:30!important}
+  #game .ejs_loading_text{position:fixed!important;top:calc(env(safe-area-inset-top) + var(--sy) + var(--sh) / 2 + 44px)!important;bottom:auto!important;left:calc(env(safe-area-inset-left) + var(--sx) + var(--sw) / 2)!important;z-index:30!important}
   /* Barra de menú de EmulatorJS: la sustituye nuestro menú ☰ */
   #game .ejs_menu_bar{display:none!important}
   #pad{position:absolute;inset:0;pointer-events:none;z-index:5;--acc:#7b5cff}

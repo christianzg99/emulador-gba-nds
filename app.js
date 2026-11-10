@@ -755,7 +755,7 @@
     d.addEventListener("pointerdown", function(e){ e.preventDefault(); id=e.pointerId; try{d.setPointerCapture(id);}catch(_){} setDirs(dirsFrom(e)); });
     d.addEventListener("pointermove", function(e){ if (e.pointerId===id) setDirs(dirsFrom(e)); });
     var end = function(e){ if (e.pointerId===id){ id=null; setDirs({u:0,d:0,l:0,r:0}); } };
-    d.addEventListener("pointerup", end); d.addEventListener("pointercancel", end);
+    d.addEventListener("pointerup", end); d.addEventListener("pointercancel", end); d.addEventListener("lostpointercapture", end);
   }
 
   // Botones de acción: se puede deslizar y pulsar dos a la vez tocando entre ellos
@@ -796,17 +796,23 @@
     f.addEventListener("pointerdown", function(e){ e.preventDefault(); try{f.setPointerCapture(e.pointerId);}catch(_){} facePointers[e.pointerId]=faceHits(e); syncFace(); });
     f.addEventListener("pointermove", function(e){ if (facePointers[e.pointerId]){ facePointers[e.pointerId]=faceHits(e); syncFace(); } });
     var end = function(e){ delete facePointers[e.pointerId]; syncFace(); };
-    f.addEventListener("pointerup", end); f.addEventListener("pointercancel", end);
+    f.addEventListener("pointerup", end); f.addEventListener("pointercancel", end); f.addEventListener("lostpointercapture", end);
   }
 
   function bindHold(node){        // L, R, Select, Start
     var k = +node.dataset.k, n = 0;
     node.addEventListener("pointerdown", function(e){ e.preventDefault(); try{node.setPointerCapture(e.pointerId);}catch(_){} if(!n++){ key(k,1); hap(); } node.classList.add("on"); });
     var end = function(){ if (n){ n=0; key(k,0); node.classList.remove("on"); } };
-    node.addEventListener("pointerup", end); node.addEventListener("pointercancel", end);
+    node.addEventListener("pointerup", end); node.addEventListener("pointercancel", end); node.addEventListener("lostpointercapture", end);
     releasers.push(end);
   }
   var releasers = [];
+  // Red de seguridad contra botones "atascados": si iOS no avisa de que se ha levantado un dedo
+  // (gestos del sistema, notificaciones…), al no quedar ningún dedo en la pantalla se suelta todo.
+  ["touchend", "touchcancel"].forEach(function(ev){
+    document.addEventListener(ev, function(e){ if (gameStarted && e.touches && e.touches.length === 0) releaseAll(); }, true);
+  });
+  window.addEventListener("blur", function(){ if (gameStarted) releaseAll(); });
   function releaseAll(){       // suelta todo lo pulsado (evita teclas "atascadas" al volver)
     setDirs({u:0,d:0,l:0,r:0});
     facePointers = {}; syncFace();
