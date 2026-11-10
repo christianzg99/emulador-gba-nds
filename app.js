@@ -539,7 +539,7 @@
   function toast(msg, ms){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");}, ms || 1600); }
 
   /* ---------- Preferencias (se recuerdan en este dispositivo) ---------- */
-  var PREF_DEF = { ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
+  var PREF_DEF = { landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
   var prefs = (function(){ try { return Object.assign({}, PREF_DEF, JSON.parse(store.get("prefs") || "{}")); } catch(e){ return Object.assign({}, PREF_DEF); } })();
   if (!prefs.offsets || !prefs.offsets.portrait) prefs.offsets = {portrait:{}, landscape:{}};
   function savePrefs(){ store.set("prefs", JSON.stringify(prefs)); }
@@ -582,6 +582,7 @@
     ["left","top","right","bottom","width","height"].forEach(function(k){ st[k] = (r[k]==null) ? "" : r[k]+"px"; });
   }
 
+  var stx = 1;
   function layout(){
     var W = stage.clientWidth, H = stage.clientHeight;
     if (!W || !H) return;
@@ -614,10 +615,18 @@
     } else {
       // Horizontal: pantalla centrada a toda la altura, mandos a los lados
       var side = Math.max(150, Math.min(210, W*0.2));
-      sw = W - side*2; sh = sw / a;
-      if (sh > H){ sh = H; sw = H*a; }
+      var lm = SYS === "gba" ? prefs.landMode : "normal";
+      if (lm === "full" || lm === "stretch"){
+        // GBA a pantalla completa: toda la altura (los botones quedan encima de la imagen)
+        sh = H; sw = H * a; if (sw > W){ sw = W; sh = W / a; }
+      } else {
+        sw = W - side*2; sh = sw / a;
+        if (sh > H){ sh = H; sw = H*a; }
+      }
       sx = (W - sw)/2; sy = (H - sh)/2;
-      var col = Math.max(side, sx);                    // ancho real de cada lateral
+      stx = 1;
+      if (lm === "stretch"){ stx = W / sw; sx = 0; }       // estirada: se ensancha hasta los bordes
+      var col = lm === "normal" ? Math.max(side, sx) : side;   // ancho real de cada lateral
       var size2 = Math.max(110, Math.min(160, col - 16, H - 130));
       place(el("bL"), {left:m, top:m});
       place(el("bMenu"), {left:m+82, top:m});
@@ -634,6 +643,7 @@
     stage.style.setProperty("--sx", sx+"px"); stage.style.setProperty("--sy", sy+"px");
     stage.style.setProperty("--sw", sw+"px"); stage.style.setProperty("--sh", sh+"px");
     stage.style.setProperty("--px", (sw / nativeW()) + "px");
+    stage.style.setProperty("--stx", String(landscape ? stx : 1));
     el("play").classList.toggle("land", landscape);
     layoutFace();
     applyPadPrefs();
@@ -959,6 +969,8 @@
     paintSegV("ffSeg", prefs.ff);
     paintSegV("filterSeg", prefs.filter);
     paintSegV("dsSeg", prefs.dsMode);
+    paintSegV("landSeg", prefs.landMode);
+    el("landOpts").style.display = SYS === "gba" ? "" : "none";
     document.querySelectorAll("#turboSeg button").forEach(function(b){ b.classList.toggle("on", !!prefs.turbo[b.dataset.k]); });
     document.querySelectorAll("#optSeg button").forEach(function(b){ b.classList.toggle("on", !!prefs[b.dataset.o]); });
     el("dsOpts").style.display = SYS === "nds" ? "" : "none";
@@ -1080,6 +1092,8 @@
     }; });
     document.querySelectorAll("#ffSeg button").forEach(function(b){ b.onclick = function(){ prefs.ff = b.dataset.v; savePrefs(); applyFF(); paintMenu(); }; });
     document.querySelectorAll("#filterSeg button").forEach(function(b){ b.onclick = function(){ prefs.filter = b.dataset.v; savePrefs(); applyFilter(); paintMenu(); }; });
+    document.querySelectorAll("#landSeg button").forEach(function(b){ b.onclick = function(){ prefs.landMode = b.dataset.v; savePrefs(); layout(); paintMenu();
+      if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
     document.querySelectorAll("#dsSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsMode = b.dataset.v; savePrefs(); applyDsLayout(); layout(); paintMenu(); }; });
     document.querySelectorAll("#turboSeg button").forEach(function(b){ b.onclick = function(){ prefs.turbo[b.dataset.k] = !prefs.turbo[b.dataset.k]; savePrefs(); paintMenu(); }; });
     el("padSize").oninput = function(){ prefs.padSize = +this.value; savePrefs(); paintMenu(); layout(); };
