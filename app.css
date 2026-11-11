@@ -205,7 +205,7 @@
 
   /* Hojas (menú y ajustes avanzados) */
   .sheetwrap{display:none;position:absolute;inset:0;z-index:70;background:rgba(0,0,0,.55)}
-  .sheetwrap.show{display:flex;align-items:flex-end;justify-content:center}
+  .sheetwrap.show{display:flex;align-items:flex-end;justify-content:center;padding-bottom:var(--kb,0px);transition:padding-bottom .15s}
   .sheet{width:min(560px,100%);max-height:86%;display:flex;flex-direction:column;background:#141729;border:1px solid #2a2f4a;border-bottom:0;border-radius:20px 20px 0 0;color:#eef0ff;font-family:Inter,sans-serif;animation:up .18s ease-out}
   #play.land .sheet{max-height:96%;border-radius:20px 20px 0 0}
   @keyframes up{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}

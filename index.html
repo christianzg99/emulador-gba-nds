@@ -197,8 +197,8 @@
           <p class="hint">Códigos GameShark, Action Replay o CodeBreaker. Se guardan para este juego. Algunos trucos pueden colgar el juego: guarda antes de activarlos.</p>
           <div id="cheatList"></div>
           <h4>Añadir truco</h4>
-          <input id="cheatName" class="inp" placeholder="Nombre (p. ej. Caramelos raros)" autocomplete="off">
-          <textarea id="cheatCode" class="inp" rows="3" placeholder="Código (una línea por cada parte)" autocapitalize="characters" autocomplete="off" spellcheck="false"></textarea>
+          <input id="cheatName" name="zeta-truco-desc" class="inp" type="text" placeholder="¿Qué hace? (p. ej. caramelos raros)" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" data-form-type="other" data-lpignore="true" enterkeyhint="next">
+          <textarea id="cheatCode" name="zeta-truco-codigo" class="inp" rows="3" placeholder="Código del truco, una parte por línea" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" data-form-type="other" data-lpignore="true"></textarea>
           <div class="seg"><button id="cheatAdd">Añadir y activar</button></div>
         </div>
       </div>

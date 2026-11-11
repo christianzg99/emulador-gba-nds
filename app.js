@@ -1313,6 +1313,14 @@
   }
 
   /* ---------- Captura de pantalla para compartir ---------- */
+  // "¡Estoy jugando a Pokemon Mystery Dungeon - Red Rescue Team en Game Boy Advance con Emulador Zeta!"
+  function shareText(){
+    var file = (CURRENT_ID || "").split(":").slice(1, -1).join(":");
+    var game = file.replace(/\.[^.]+$/, "").replace(/\s*[\(\[][^\)\]]*[\)\]]/g, "").replace(/\s+/g, " ").trim() || "un juego";
+    var ext = (file.split(".").pop() || "").toLowerCase();
+    var consoleName = SYS === "nds" ? "Nintendo DS" : ext === "gb" ? "Game Boy" : ext === "gbc" ? "Game Boy Color" : "Game Boy Advance";
+    return "¡Estoy jugando a " + game + " en " + consoleName + " con Emulador Zeta!";
+  }
   function shareShot(){
     var src = menuShot;
     if (!src){ toast("No se pudo hacer la captura. Cierra el menú, deja correr el juego un momento y vuelve a probar.", 3500); return; }
@@ -1321,9 +1329,9 @@
       var c = document.createElement("canvas"); c.width = bm.width * k; c.height = bm.height * k;
       var x = c.getContext("2d"); x.imageSmoothingEnabled = false; x.drawImage(bm, 0, 0, c.width, c.height);
       c.toBlob(function(b){
-        var d = new Date(), nm = (window.EJS_gameName || "captura").slice(0, 60) + " " + d.toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".png";
+        var d = new Date(), nm = shareText().replace(/^¡Estoy jugando a | en .*$/g, "").slice(0, 60) + " " + d.toISOString().slice(0, 10) + ".png";
         var f = new File([b], nm, {type:"image/png"});
-        if (navigator.canShare && navigator.canShare({files:[f]})) navigator.share({files:[f], title:"Emulador Zeta"}).catch(function(){});
+        if (navigator.canShare && navigator.canShare({files:[f]})) navigator.share({files:[f], text: shareText()}).catch(function(){});
         else { var a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = nm; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); }, 3000); }
       }, "image/png");
     }).catch(function(){ toast("No se pudo hacer la captura"); });
@@ -1361,6 +1369,15 @@
       };
       box.appendChild(r);
     });
+  }
+  if (window.visualViewport){
+    var kb = function(){
+      var v = window.visualViewport, h = Math.max(0, window.innerHeight - v.height - v.offsetTop);
+      document.documentElement.style.setProperty("--kb", h + "px");
+      var a = document.activeElement;
+      if (h && a && a.closest && a.closest(".sheet")) setTimeout(function(){ a.scrollIntoView({block:"center"}); }, 60);
+    };
+    visualViewport.addEventListener("resize", kb); visualViewport.addEventListener("scroll", kb);
   }
   function openCheats(){
     loadCheats().then(function(){ renderCheats(); el("sheet").classList.remove("show"); el("cheats").classList.add("show"); });
