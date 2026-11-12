@@ -543,7 +543,16 @@
   });
 
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
-    navigator.serviceWorker.register("sw.js").catch(function(){});
+    navigator.serviceWorker.register("sw.js", {updateViaCache: "none"}).then(function(reg){
+      // al volver a la app, comprobar si hay versión nueva
+      document.addEventListener("visibilitychange", function(){ if (!document.hidden) reg.update().catch(function(){}); });
+    }).catch(function(){});
+    // Cuando llega una versión nueva y no estás jugando, la app se recarga sola para mostrarla
+    var hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", function(){
+      if (!hadController){ hadController = true; return; }
+      if (!started) location.reload();
+    });
   }
 
   var started = false, CURRENT_ID = null;

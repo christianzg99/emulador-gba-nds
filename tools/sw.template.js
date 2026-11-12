@@ -5,7 +5,7 @@ const FILES = __FILES__;
 let slowUntil = 0;
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -34,7 +34,8 @@ self.addEventListener("fetch", (event) => {
   if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
     event.respondWith(
       caches.open("fonts-v1").then((c) => c.match(req).then((hit) => {
-        const net = fetch(req).then((res) => { if (res.ok) c.put(req, res.clone()); return res; });
+        // "no-cache": pregunta siempre al servidor si hay versión nueva (GitHub guarda copias 10 min)
+    const net = fetch(req, { cache: "no-cache" }).then((res) => { if (res.ok) c.put(req, res.clone()); return res; });
         return hit || net;
       }))
     );
@@ -47,7 +48,8 @@ self.addEventListener("fetch", (event) => {
   if (shell) {
     // Con mala cobertura no se espera más de 2,5 s: se abre la copia guardada y la descarga sigue
     // en segundo plano para la próxima vez.
-    const net = fetch(req).then((res) => {
+    // "no-cache": pregunta siempre al servidor si hay versión nueva (GitHub guarda copias 10 min)
+    const net = fetch(req, { cache: "no-cache" }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(shell, copy)); }
       return res;
     });
