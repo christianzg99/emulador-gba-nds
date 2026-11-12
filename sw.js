@@ -1,6 +1,6 @@
 // Service worker: permite abrir el emulador sin conexión.
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
-const VERSION = "emu-cbc99b663e";
+const VERSION = "emu-eac5a8a9f6";
 const FILES = [
   "./",
   "index.html",

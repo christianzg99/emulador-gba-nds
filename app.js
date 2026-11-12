@@ -1414,6 +1414,7 @@
   }
   // Que nada (teclado, foco) deje la pantalla de juego desplazada
   function fixScroll(){
+    if (!started) return;                    // solo durante la partida: en el inicio hay que poder deslizar
     try { window.scrollTo(0, 0); el("play").scrollTop = 0; stage.scrollTop = 0; document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch(e){}
   }
   function openCheats(){
