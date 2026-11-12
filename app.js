@@ -636,7 +636,15 @@
   }
 
   // Vibración mínima al pulsar. iPhone (iOS 18+): truco del interruptor nativo; Android: vibrate().
-  function hap(){
+  // En iPhone el sistema solo deja vibrar dentro de un gesto "completo" (al levantar el dedo), no al
+  // empezar el toque: por eso allí la vibración se lanza en touchend, y en Android al pulsar.
+  var HAP_IOS = !navigator.vibrate;
+  function hap(){ if (!HAP_IOS) hapNow(); }
+  document.addEventListener("touchend", function(e){
+    if (!started || !HAP_IOS || !e.target.closest) return;
+    if (e.target.closest("#pad > *") && !document.getElementById("play").classList.contains("editing")) hapNow();
+  }, true);
+  function hapNow(){
     if (!prefs.haptics) return;
     try {
       if (navigator.vibrate){ navigator.vibrate(5); return; }
@@ -1214,7 +1222,7 @@
       if (b.dataset.o === "autoDim"){ prefs.autoDim = !prefs.autoDim; savePrefs(); paintMenu(); applyPadPrefs(); return; }
       prefs[b.dataset.o] = !prefs[b.dataset.o]; savePrefs(); paintMenu();
       if (b.dataset.o === "silentSound") applyAudioSession();
-      if (b.dataset.o === "haptics" && prefs.haptics) hap();
+      if (b.dataset.o === "haptics" && prefs.haptics) hapNow();
     }; });
     document.querySelectorAll("#ffSeg button").forEach(function(b){ b.onclick = function(){ prefs.ff = b.dataset.v; savePrefs(); applyFF(); paintMenu(); }; });
     document.querySelectorAll("#filterSeg button").forEach(function(b){ b.onclick = function(){ prefs.filter = b.dataset.v; savePrefs(); applyFilter(); paintMenu(); }; });

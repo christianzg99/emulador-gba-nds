@@ -283,3 +283,62 @@
   #errbox .t{font-weight:800;font-size:17px;color:#fff}
   #errbox .w{color:#9aa0c3;font-size:13.5px;line-height:1.5;white-space:pre-line}
   #errbox button{border:0;border-radius:12px;padding:12px;font:700 14px Inter,sans-serif;background:var(--acc,#7b5cff);color:#fff}
+
+  /* ============ Menús durante la partida: mismo estilo que el inicio ============ */
+  .sheetwrap{background:rgba(6,3,22,.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  .sheet,#cont .box,#errbox .box{--acc:var(--zeta);font-family:var(--font);color:var(--text);
+    background:linear-gradient(180deg,#22124f 0%,#150d36 38%,var(--noche) 100%);border:1px solid rgba(255,150,50,.22);border-bottom:0;
+    box-shadow:0 -18px 50px -20px rgba(255,110,20,.45)}
+  .sheet{border-radius:26px 26px 0 0}
+  .sheet::before{content:"";flex:none;align-self:center;width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.22);margin-top:8px}
+  #cont .box,#errbox .box{border-bottom:1px solid rgba(255,150,50,.22);border-radius:24px}
+  .sh-head{padding:10px 18px 10px}
+  .sh-head b{font-size:22px;font-weight:700;font-stretch:92%;letter-spacing:-.01em}
+  .sh-x{background:rgba(255,255,255,.08);color:var(--text);width:36px;height:36px}
+  .sh-body{padding:0 18px calc(24px + env(safe-area-inset-bottom))}
+  .sh-body h4{margin:22px 0 10px;font-size:15px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0}
+  .acts{gap:8px}
+  .acts button{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:16px;padding:12px 2px;font:600 12px var(--font);color:var(--text)}
+  .acts button:active{background:rgba(255,150,50,.18)}
+  .acts button i{font-size:19px}
+  .acts.two{margin-top:8px}
+  .acts.two button{font-size:14.5px;padding:13px}
+  .sheet .seg{background:rgba(10,6,30,.6);border:1px solid var(--line);border-radius:14px}
+  .sheet .seg button{font:600 14px var(--font);color:var(--muted);border-radius:11px;padding:11px 4px}
+  .sheet .seg button.on{background:linear-gradient(180deg,#ffd75a,var(--zeta));color:#2a0d00}
+  .sheet .seg.toggles button{font-size:13px}
+  .slot{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px}
+  .slot .pic{background-color:#0d0828;color:rgba(255,255,255,.3)}
+  .slot .when{color:var(--muted);font-size:11px}
+  .slot .bt{border-top:1px solid var(--line)}
+  .slot .bt button{font:600 12px var(--font);color:var(--ki)}
+  .slot .bt button + button{border-left:1px solid var(--line);color:var(--text)}
+  .slot .bt button:disabled{color:rgba(255,255,255,.22)}
+  .sl{font-size:14.5px;color:var(--text)}
+  .sl input{accent-color:var(--zeta)}
+  .sl output{color:var(--muted)}
+  .hint{color:var(--muted);font-size:14px}
+  .inp{background:rgba(10,6,30,.6);border:1px solid var(--line);border-radius:14px;font-size:16px}
+  .inp:focus{border-color:rgba(255,198,41,.5)}
+  #cheatName{font-family:var(--font)}
+  .cheat{border-bottom:1px solid var(--line)}
+  .cheat .cn b{font-size:15.5px}
+  .cheat .cn code{color:var(--muted)}
+  .cheat button{background:rgba(255,255,255,.06);border:1px solid var(--line);font:600 13px var(--font);border-radius:999px;padding:8px 13px}
+  .cheat button.on{background:linear-gradient(180deg,#ffd75a,var(--zeta));color:#2a0d00;border-color:transparent}
+  .cheat button.del{color:#ff9a80}
+  .nocheat{color:var(--muted);font-size:14px}
+  #advBody .ejs_settings_main_bar,#advBody .ejs_option_row{font-family:var(--font)!important;color:var(--text)!important;border-bottom:1px solid var(--line)!important}
+  #advBody .ejs_back_button{font-family:var(--font)!important;color:var(--muted)!important}
+  #cont .t,#errbox .t{font:700 20px var(--font)}
+  #cont .w,#errbox .w{color:var(--muted);font-size:14.5px}
+  #cont button{border:1px solid var(--line);border-radius:999px;font:600 15px var(--font);color:var(--text)}
+  #cont button.pri,#errbox button{border:0;border-radius:999px;background:linear-gradient(180deg,#ffd75a,var(--zeta));color:#2a0d00;font:700 16px var(--font)}
+  #resume div{font:600 17px var(--font)}
+  #resume b{background:linear-gradient(180deg,#ffd75a,var(--zeta));color:#2a0d00;box-shadow:0 10px 30px -8px rgba(255,116,23,.8)}
+  #toast{font:600 13px var(--font);background:rgba(21,13,54,.92);border:1px solid rgba(255,150,50,.3);padding:8px 14px}
+  #editbar{font:600 13px var(--font);background:rgba(21,13,54,.95);border:1px solid rgba(255,150,50,.3)}
+  #editbar button{background:linear-gradient(180deg,#ffd75a,var(--zeta));color:#2a0d00}
+  .slot .bt{grid-template-columns:1fr}
+  .slot .bt button{padding:9px 0}
+  .slot .bt button + button{border-left:0;border-top:1px solid var(--line)}
