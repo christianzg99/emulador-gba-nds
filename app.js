@@ -1067,6 +1067,7 @@
     paintMenu();
     // el menú aparece al instante; la captura para las ranuras se toma en el siguiente fotograma y luego se pausa
     menuShot = null;
+    document.documentElement.style.setProperty("--kb", "0px"); fixScroll();
     el("sheet").classList.add("show"); renderSlots();
     shot().then(function(b){ menuShot = b; if (el("sheet").classList.contains("show")) pauseForSheet(); });
   }
@@ -1346,11 +1347,30 @@
     });
   }
   function saveCheats(){ return Recent.update(CURRENT_ID, function(r){ r.cheats = cheats; }); }
+  // mGBA solo entiende líneas "XXXXXXXX YYYYYYYY" (GameShark / Action Replay) o "XXXXXXXX YYYY" (CodeBreaker)
+  // unidas con "+". Se limpia lo que escriba el usuario: sin espacio, con guiones, todo seguido, etc.
+  function cheatLines(code){
+    var out = [];
+    String(code).toUpperCase().split(/[\n+;,]+/).forEach(function(line){
+      var hex = line.replace(/[^0-9A-F]/g, "");
+      if (!hex) return;
+      if (hex.length === 12){ out.push(hex.slice(0, 8) + " " + hex.slice(8)); return; }
+      if (hex.length % 16 === 0){ for (var i = 0; i < hex.length; i += 16) out.push(hex.slice(i, i + 8) + " " + hex.slice(i + 8, i + 16)); return; }
+      if (hex.length % 12 === 0){ for (var j = 0; j < hex.length; j += 12) out.push(hex.slice(j, j + 8) + " " + hex.slice(j + 8, j + 12)); return; }
+      out.push(null);                         // línea que no cuadra con ningún formato
+    });
+    return out;
+  }
+  function cheatFormat(code){
+    var lines = cheatLines(code).filter(Boolean);
+    return SYS === "gba" && CORE === "mgba" ? lines.join("+") : lines.join("\n");
+  }
   function applyCheats(){
     loadCheats().then(function(){
       var g = gm(); if (!g) return;
       try { g.resetCheat(); } catch(e){}
-      cheats.forEach(function(c, i){ if (c.on) try { g.setCheat(i, 1, c.code); } catch(e){} });
+      var n = 0;
+      cheats.forEach(function(c){ if (c.on) try { g.setCheat(n++, 1, cheatFormat(c.code)); } catch(e){} });
     });
   }
   function renderCheats(){
@@ -1372,12 +1392,21 @@
   }
   if (window.visualViewport){
     var kb = function(){
-      var v = window.visualViewport, h = Math.max(0, window.innerHeight - v.height - v.offsetTop);
+      var v = window.visualViewport, a = document.activeElement;
+      var typing = a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== "range" && a.type !== "file" && a.closest(".sheet");
+      var h = typing ? Math.max(0, window.innerHeight - v.height - v.offsetTop) : 0;
+      if (h < 80) h = 0;
       document.documentElement.style.setProperty("--kb", h + "px");
-      var a = document.activeElement;
-      if (h && a && a.closest && a.closest(".sheet")) setTimeout(function(){ a.scrollIntoView({block:"center"}); }, 60);
+      if (h){ var body = a.closest(".sh-body"); if (body) setTimeout(function(){ body.scrollTop += a.getBoundingClientRect().top - body.getBoundingClientRect().top - 40; }, 60); }
+      else fixScroll();
     };
     visualViewport.addEventListener("resize", kb); visualViewport.addEventListener("scroll", kb);
+    document.addEventListener("focusout", function(){ setTimeout(kb, 80); });
+    document.addEventListener("focusin", function(){ setTimeout(kb, 80); });
+  }
+  // Que nada (teclado, foco) deje la pantalla de juego desplazada
+  function fixScroll(){
+    try { window.scrollTo(0, 0); el("play").scrollTop = 0; stage.scrollTop = 0; document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch(e){}
   }
   function openCheats(){
     loadCheats().then(function(){ renderCheats(); el("sheet").classList.remove("show"); el("cheats").classList.add("show"); });
@@ -1385,6 +1414,11 @@
   function addCheat(){
     var name = el("cheatName").value.trim(), code = el("cheatCode").value.trim().toUpperCase().replace(/[ \t]+/g, " ").replace(/\n+/g, "\n");
     if (!code){ toast("Escribe el código del truco"); return; }
+    var parsed = cheatLines(code);
+    if (!parsed.length || parsed.indexOf(null) >= 0){
+      toast("Ese código no tiene el formato esperado: cada línea debe tener 16 caracteres (8 + 8) o 12 (8 + 4), solo números y letras de la A a la F.", 6000); return;
+    }
+    code = parsed.join("\n");
     cheats.push({name: name || "Truco " + (cheats.length + 1), code: code, on: true});
     el("cheatName").value = ""; el("cheatCode").value = "";
     saveCheats().then(applyCheats); renderCheats(); toast("Truco añadido y activado");
@@ -1400,16 +1434,22 @@
   }
   function gpMark(list){
     document.querySelectorAll(".gpfocus").forEach(function(n){ n.classList.remove("gpfocus"); });
-    if (list[gpFocus]){ list[gpFocus].classList.add("gpfocus"); list[gpFocus].scrollIntoView({block:"nearest"}); }
+    var n = list[gpFocus]; if (!n) return;
+    n.classList.add("gpfocus");
+    var body = n.closest(".sh-body");
+    if (body){ var r = n.getBoundingClientRect(), br = body.getBoundingClientRect();
+      if (r.top < br.top) body.scrollTop -= br.top - r.top + 12; else if (r.bottom > br.bottom) body.scrollTop += r.bottom - br.bottom + 12; }
   }
   setInterval(function(){
     if (!gameStarted || !navigator.getGamepads || !anySheet() && !el("errbox").classList.contains("show")){ gpFocus = -1; return; }
-    var now = {};
+    var now = {}, hasPad = false;
     try { Array.prototype.forEach.call(navigator.getGamepads(), function(gp){
       if (!gp || !gp.buttons) return;
+      hasPad = true;
       [0,1,12,13,14,15].forEach(function(i){ if (gp.buttons[i] && gp.buttons[i].pressed) now[i] = 1; });
     }); } catch(e){}
     var hit = function(i){ return now[i] && !gpPrev[i]; };
+    if (!hasPad){ if (gpFocus >= 0){ gpFocus = -1; gpMark([]); } gpPrev = {}; return; }
     var list = gpFocusables();
     if (list.length){
       if (gpFocus < 0 || gpFocus >= list.length){ gpFocus = 0; gpMark(list); }
