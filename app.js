@@ -233,7 +233,7 @@
   function renderResume(items, sz){
     var card = document.getElementById("resumeCard");
     var last = items.filter(function(i){ return (sz[i.id] || {}).rom > 0; }).sort(function(a, b){ return b.last - a.last; })[0];
-    document.getElementById("addTitle").textContent = items.length ? "Abrir otro juego" : "Abre tu primer juego";
+    
     if (!last){ card.hidden = true; return; }
     card.hidden = false;
     card.querySelector(".rc-name").textContent = last.name.replace(/\.[^.]+$/, "");
