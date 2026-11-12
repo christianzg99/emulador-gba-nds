@@ -342,3 +342,18 @@
   .slot .bt{grid-template-columns:1fr}
   .slot .bt button{padding:9px 0}
   .slot .bt button + button{border-left:0;border-top:1px solid var(--line)}
+
+  /* Nintendo 64 */
+  .card.wide{grid-column:1 / -1;min-height:0;flex-direction:row;align-items:center;gap:14px}
+  .card.wide .sysic{margin:0;color:var(--brasa)}
+  .card.wide .cn{display:block;margin-top:0}
+  .card.wide .cx{display:block}
+  .ri .tag.n64{color:#ff9a6b}
+  #stick{display:none;border-radius:50%;background:rgba(28,30,46,.55);border:1.5px solid rgba(255,255,255,.32)}
+  #stick i{position:absolute;left:25%;top:25%;width:50%;height:50%;border-radius:50%;background:rgba(255,255,255,.22);border:1.5px solid rgba(255,255,255,.5);pointer-events:none}
+  #pad.n64 #stick{display:block}
+  #pad.n64 #dpad{display:none}
+  #pad.n64{--acc:#ff7417}
+  #face .fb.cbtn{background:rgba(255,198,41,.28);border-color:rgba(255,198,41,.6)}
+  .card.wide{width:100%}
+  #pad.n64 #bSel{min-width:64px;font-weight:800;font-size:15px}

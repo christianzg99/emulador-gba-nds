@@ -1,6 +1,6 @@
 // Service worker: permite abrir el emulador sin conexión.
 // La versión cambia en cada publicación, así que al haber internet se descarga lo nuevo.
-const VERSION = "emu-eac5a8a9f6";
+const VERSION = "emu-c32ec7e8f3";
 const FILES = [
   "./",
   "index.html",
@@ -26,9 +26,12 @@ const FILES = [
   "data/cores/melonds-wasm.data",
   "data/cores/mgba-legacy-wasm.data",
   "data/cores/mgba-wasm.data",
+  "data/cores/parallel_n64-legacy-wasm.data",
+  "data/cores/parallel_n64-wasm.data",
   "data/cores/reports/desmume2015.json",
   "data/cores/reports/melonds.json",
-  "data/cores/reports/mgba.json"
+  "data/cores/reports/mgba.json",
+  "data/cores/reports/parallel_n64.json"
 ];
 let slowUntil = 0;
 

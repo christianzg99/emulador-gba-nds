@@ -31,10 +31,13 @@
   function showErr(msg){ var el=document.getElementById("err"); el.textContent=msg; el.className=""; el.style.display="block"; el.scrollIntoView({block:"nearest"}); }
   function showOk(msg){ var el=document.getElementById("err"); el.textContent=msg; el.className="ok"; el.style.display="block"; el.scrollIntoView({block:"nearest"}); }
 
+  var SYSINFO = { gba:{tag:"GBA", name:"Game Boy Advance"}, nds:{tag:"NDS", name:"Nintendo DS"}, n64:{tag:"N64", name:"Nintendo 64"} };
+  function sysTag(s){ return (SYSINFO[s] || SYSINFO.gba).tag; }
   function sysFromName(name){
     var ext = (name.split(".").pop()||"").toLowerCase();
     if (["gba","gb","gbc","agb","sgb"].indexOf(ext)>=0) return "gba";
     if (["nds","dsi","srl"].indexOf(ext)>=0) return "nds";
+    if (["n64","z64","v64"].indexOf(ext)>=0) return "n64";
     if (["zip","7z","rar"].indexOf(ext)>=0) return "archive";
     return null;
   }
@@ -44,6 +47,7 @@
     return file.slice(0, Math.min(file.size, 4096)).arrayBuffer().then(function(buf){
       var txt = new TextDecoder("latin1").decode(new Uint8Array(buf)).toLowerCase();
       if (/\.nds/.test(txt)) return "nds";
+      if (/\.[nzv]64/.test(txt)) return "n64";
       if (/\.gb[ac]?/.test(txt)) return "gba";
       return null;
     }).catch(function(){ return null; });
@@ -172,7 +176,7 @@
   // Carátula oficial (libretro-thumbnails) a partir del nombre estándar del archivo
   function artUrl(it){
     var ext = (it.name.split(".").pop() || "").toLowerCase();
-    var sys = it.sys === "nds" ? "Nintendo_-_Nintendo_DS" : ext === "gb" ? "Nintendo_-_Game_Boy" : ext === "gbc" ? "Nintendo_-_Game_Boy_Color" : "Nintendo_-_Game_Boy_Advance";
+    var sys = it.sys === "n64" ? "Nintendo_-_Nintendo_64" : it.sys === "nds" ? "Nintendo_-_Nintendo_DS" : ext === "gb" ? "Nintendo_-_Game_Boy" : ext === "gbc" ? "Nintendo_-_Game_Boy_Color" : "Nintendo_-_Game_Boy_Advance";
     var base = it.name.replace(/\.[^.]+$/, "").replace(/[&*\/:`<>?\\|"]/g, "_");
     return "https://raw.githubusercontent.com/libretro-thumbnails/" + sys + "/master/Named_Boxarts/" + encodeURIComponent(base) + ".png";
   }
@@ -192,7 +196,7 @@
       shown.forEach(function(it){
         var s = sz[it.id] || {rom:0, extra:0}, hasRom = s.rom > 0;
         var b = document.createElement("div"); b.className = "ri" + (hasRom ? "" : " norom"); b.setAttribute("role","button");
-        var label = it.sys==="gba" ? "GBA" : "NDS";
+        var label = sysTag(it.sys);
         b.innerHTML = '<div class="tag '+it.sys+'"><b>'+label+'</b></div><div class="txt"><div class="nm"></div><div class="mt"></div></div>' +
           '<div class="fav'+(it.fav?' on':'')+'" aria-label="Favorito">★</div><div class="more" aria-label="Opciones">⋯</div>';
         b.querySelector(".nm").textContent = it.name.replace(/\.[^.]+$/, "");
@@ -234,7 +238,7 @@
     card.hidden = false;
     card.querySelector(".rc-name").textContent = last.name.replace(/\.[^.]+$/, "");
     card.querySelector(".rc-meta").textContent = (last.playTime ? dur(last.playTime) + " jugado, " : "") + "última vez " + ago(last.last);
-    var art = card.querySelector(".rc-art"); art.className = "rc-art"; art.style.backgroundImage = ""; art.innerHTML = "<b>" + (last.sys === "gba" ? "GBA" : "NDS") + "</b>";
+    var art = card.querySelector(".rc-art"); art.className = "rc-art"; art.style.backgroundImage = ""; art.innerHTML = "<b>" + sysTag(last.sys) + "</b>";
     var img = new Image(); img.crossOrigin = "anonymous";
     img.onload = function(){ art.innerHTML = ""; art.style.backgroundImage = 'url("' + img.src + '")'; };
     img.onerror = function(){
@@ -271,7 +275,7 @@
   function openGameSheet(it, s){
     var w = document.getElementById("gameSheet");
     document.getElementById("gsName").textContent = it.name.replace(/\.[^.]+$/, "");
-    document.getElementById("gsInfo").textContent = [it.sys === "gba" ? "Game Boy Advance" : "Nintendo DS",
+    document.getElementById("gsInfo").textContent = [(SYSINFO[it.sys] || SYSINFO.gba).name,
       it.playTime ? "Jugado " + dur(it.playTime) : "Sin tiempo de juego registrado",
       "Copia del juego: " + mb(s.rom), "Guardados rápidos y continuar: " + mb(s.extra)].join("\n");
     document.getElementById("gsFav").textContent = it.fav ? "Quitar de favoritos" : "Marcar como favorito";
@@ -547,7 +551,7 @@
     if (started) return;
     var detected = sysFromName(file.name);
     var p;
-    if (detected==="gba" || detected==="nds") p = Promise.resolve(detected);
+    if (detected==="gba" || detected==="nds" || detected==="n64") p = Promise.resolve(detected);
     else if (detected==="archive") p = chosen ? Promise.resolve(chosen) : guessFromZip(file);
     else p = Promise.resolve(chosen);
     p.then(function(sys){
@@ -578,7 +582,8 @@
   function boot(file, sys, name){
     applyAudioSession();
     patchEngine();
-    var core = sys==="gba" ? "mgba" : dsCore;
+    // N64: ParaLLEl es el motor que funciona tanto con gráficos compatibles (iPhone) como modernos
+    var core = sys==="gba" ? "mgba" : sys==="n64" ? "parallel_n64" : dsCore;
     document.getElementById("home").style.display="none";
     var aura = document.getElementById("aura"); if (aura) aura.remove();          // no gastar batería con el fondo animado
     document.getElementById("play").style.display="block";
@@ -593,7 +598,7 @@
     window.EJS_threads = false;
     window.EJS_forceLegacyCores = (gfx === "compat");   // WebGL 1: evita la pantalla en blanco de Safari en iPhone
     window.EJS_language = "es-ES";
-    window.EJS_color = sys==="gba" ? "#7b5cff" : "#19c3a6";
+    window.EJS_color = "#ff7417";
     window.EJS_startOnLoaded = false;    // el toque en "Jugar" desbloquea el audio
     window.EJS_startButtonName = "Jugar";
     window.EJS_backgroundColor = "#000";
@@ -620,7 +625,8 @@
   var el = function(id){ return document.getElementById(id); };
 
   function gm(){ return window.EJS_emulator && window.EJS_emulator.gameManager; }
-  function key(k, v){ var g = gm(); if (g) try { (g.__sim || g.simulateInput).call(g, 0, k, v); } catch(e){} }
+  function key(k, v){ var g = gm(); if (g) try { (g.__sim || g.simulateInput).call(g, 0, k, k >= 16 && v === 1 ? 0x7fff : v); } catch(e){} }
+  function T(){ return SYS === "n64" ? (prefs.turbo64 = prefs.turbo64 || {}) : prefs.turbo; }
 
   function toast(msg, ms){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");}, ms || 1600); }
 
@@ -658,8 +664,8 @@
 
   // Proporción de la imagen: GBA 3:2; DS una pantalla 4:3, apiladas 2:3 o lado a lado 8:3
   function dsSingle(){ return prefs.dsMode === "top" || prefs.dsMode === "bottom"; }
-  function aspect(){ return SYS==="gba" ? 3/2 : dsSingle() ? 4/3 : (landscape ? 8/3 : 2/3); }
-  function nativeW(){ return SYS==="gba" ? 240 : (landscape && !dsSingle()) ? 512 : 256; }
+  function aspect(){ return SYS==="n64" ? 4/3 : SYS==="gba" ? 3/2 : dsSingle() ? 4/3 : (landscape ? 8/3 : 2/3); }
+  function nativeW(){ return SYS==="n64" ? 320 : SYS==="gba" ? 240 : (landscape && !dsSingle()) ? 512 : 256; }
 
   function applyDsLayout(){
     if (SYS!=="nds" || !gm()) return;
@@ -699,6 +705,7 @@
       place(el("bL"), {left:m, top:top+8});
       place(el("bR"), {right:m, top:top+8});
       place(dpad, {left:m+4, top:cy-size/2, width:size, height:size});
+      place(el("stick"), {left:m+4, top:cy-size/2, width:size, height:size});
       place(face, {right:m+4, top:cy-size/2, width:size, height:size});
       var by = 12;
       place(el("bBack"), {left:m, bottom:by});
@@ -728,6 +735,7 @@
       place(el("bR"), {right:m, top:m});
       place(el("bFF"), {right:m+82, top:m});
       place(dpad, {left:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
+      place(el("stick"), {left:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
       place(face, {right:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
       place(el("bBack"), {left:m, bottom:m});
       place(el("bSel"), {left:m+48, bottom:m+3});
@@ -745,7 +753,7 @@
   }
 
   // Tamaño, opacidad y posición de los botones elegidos por el usuario (por orientación)
-  var CTRLS = ["bL","bR","dpad","face","bSel","bSta","bFF","bMenu","bBack","bMic"];
+  var CTRLS = ["bL","bR","dpad","stick","face","bSel","bSta","bFF","bMenu","bBack","bMic"];
   function applyPadPrefs(){
     var sc = (prefs.padSize || 100) / 100, offs = prefs.offsets[landscape ? "landscape" : "portrait"] || {};
     CTRLS.forEach(function(id){
@@ -761,7 +769,10 @@
   var faceBtns = [];
   function buildFace(){
     var face = el("face"); face.innerHTML = "";
-    var defs = SYS==="gba"
+    var defs = SYS==="n64"
+      ? [{t:"A",k:0,x:.52,y:.86,rf:.19},{t:"B",k:1,x:.17,y:.6,rf:.19},
+         {t:"▲",k:23,x:.72,y:.1,rf:.125},{t:"◀",k:21,x:.52,y:.32,rf:.125},{t:"▶",k:20,x:.92,y:.32,rf:.125},{t:"▼",k:22,x:.72,y:.54,rf:.125}]
+      : SYS==="gba"
       ? [{t:"A",k:8,x:.74,y:.36},{t:"B",k:0,x:.26,y:.64}]
       : [{t:"X",k:9,x:.5,y:.2},{t:"A",k:8,x:.8,y:.5},{t:"B",k:0,x:.5,y:.8},{t:"Y",k:1,x:.2,y:.5}];
     faceBtns = defs.map(function(d){ var b=document.createElement("div"); b.className="vb fb"; b.textContent=d.t; face.appendChild(b); d.el=b; return d; });
@@ -769,7 +780,29 @@
   function layoutFace(){
     var face = el("face"), S = face.clientWidth || 150;
     var r = SYS==="gba" ? S*0.24 : S*0.19;
-    faceBtns.forEach(function(d){ d.r=r; place(d.el,{left:d.x*S-r, top:d.y*S-r, width:r*2, height:r*2}); });
+    faceBtns.forEach(function(d){ d.r = d.rf ? S*d.rf : r; var r2 = d.r; d.el.style.fontSize = d.rf && d.rf < .15 ? "13px" : ""; d.el.classList.toggle("cbtn", !!(d.rf && d.rf < .15)); place(d.el,{left:d.x*S-r2, top:d.y*S-r2, width:r2*2, height:r2*2}); });
+  }
+
+  // Stick analógico de N64 (16 derecha, 17 izquierda, 18 abajo, 19 arriba; valor 0..0x7fff)
+  var stickLast = [0,0,0,0];
+  function stickSet(x, y){
+    var vals = [x > 0 ? x : 0, x < 0 ? -x : 0, y > 0 ? y : 0, y < 0 ? -y : 0].map(function(v){ return Math.round(Math.min(1, v) * 0x7fff); });
+    vals.forEach(function(v, i){ if (v !== stickLast[i]){ stickLast[i] = v; if (SYS === "n64") key(16 + i, v); } });
+    var knob = el("stick").firstElementChild; if (knob) knob.style.transform = "translate(" + (x * 28) + "%," + (y * 28) + "%)";
+  }
+  function bindStick(){
+    var st = el("stick"), id = null;
+    var move = function(e){
+      var rc = st.getBoundingClientRect(), R = rc.width * 0.36;
+      var dx = (e.clientX - (rc.left + rc.width/2)) / R, dy = (e.clientY - (rc.top + rc.height/2)) / R, d = Math.hypot(dx, dy);
+      if (d > 1){ dx /= d; dy /= d; }
+      if (d < 0.14){ dx = 0; dy = 0; }
+      stickSet(dx, dy);
+    };
+    st.addEventListener("pointerdown", function(e){ e.preventDefault(); id = e.pointerId; try{st.setPointerCapture(id);}catch(_){} move(e); });
+    st.addEventListener("pointermove", function(e){ if (e.pointerId === id) move(e); });
+    var end = function(e){ if (e.pointerId === id){ id = null; stickSet(0, 0); } };
+    st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end); st.addEventListener("lostpointercapture", end);
   }
 
   // Cruceta de 8 direcciones (incluye diagonales)
@@ -820,7 +853,7 @@
       if ((faceState[b.k]||0) !== v){
         faceState[b.k] = v;
         if (v) hap();
-        if (!prefs.turbo[b.k] || !v) key(b.k, v);          // con turbo, la pulsación la da el bucle de abajo
+        if (!T()[b.k] || !v) key(b.k, v);          // con turbo, la pulsación la da el bucle de abajo
       }
       b.el.classList.toggle("on", !!v);
     });
@@ -831,7 +864,7 @@
     var g = gm(); if (!g || g.__sim) return;
     g.__sim = g.simulateInput;
     g.simulateInput = function(p, k, v){
-      if (p === 0 && (k === 8 || k === 0) && prefs.turbo[k]){
+      if (p === 0 && (k === 8 || k === 0 || k === 1) && T()[k]){
         extHeld[k] = v > 0;
         if (!v) g.__sim.call(g, p, k, 0);
         return;                                    // con turbo activado, la pulsación la hace el bucle de turbo
@@ -844,7 +877,7 @@
   setInterval(function(){
     if (!gameStarted) return;
     turboPhase ^= 1;
-    Object.keys(prefs.turbo).forEach(function(k){ if (prefs.turbo[k] && (faceState[k] || extHeld[k])) key(+k, turboPhase); });
+    var tt = T(); Object.keys(tt).forEach(function(k){ if (tt[k] && (faceState[k] || extHeld[k])) key(+k, turboPhase); });
   }, 50);
   function bindFace(){
     var f = el("face");
@@ -880,7 +913,7 @@
   });
   window.addEventListener("blur", function(){ if (gameStarted) releaseAll(); });
   function releaseAll(){       // suelta todo lo pulsado (evita teclas "atascadas" al volver)
-    setDirs({u:0,d:0,l:0,r:0});
+    setDirs({u:0,d:0,l:0,r:0}); stickSet(0, 0);
     facePointers = {}; syncFace();
     releasers.forEach(function(f){ f(); });
   }
@@ -1101,7 +1134,8 @@
     paintSegV("dsSeg", prefs.dsMode);
     paintSegV("landSeg", prefs.landMode);
     el("landOpts").style.display = SYS === "gba" ? "" : "none";
-    document.querySelectorAll("#turboSeg button").forEach(function(b){ b.classList.toggle("on", !!prefs.turbo[b.dataset.k]); });
+    if (SYS === "n64") document.querySelectorAll('#filterSeg [data-v="lcd"]').forEach(function(b){ b.style.display = "none"; });
+    document.querySelectorAll("#turboSeg button").forEach(function(b){ b.classList.toggle("on", !!T()[b.dataset.k]); });
     document.querySelectorAll("#optSeg button, #optSeg2 button").forEach(function(b){ b.classList.toggle("on", !!prefs[b.dataset.o]); });
     el("dsOpts").style.display = SYS === "nds" ? "" : "none";
     el("padSize").value = prefs.padSize; el("padSizeV").textContent = prefs.padSize + "%";
@@ -1229,7 +1263,7 @@
     document.querySelectorAll("#landSeg button").forEach(function(b){ b.onclick = function(){ prefs.landMode = b.dataset.v; savePrefs(); layout(); paintMenu();
       if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
     document.querySelectorAll("#dsSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsMode = b.dataset.v; savePrefs(); applyDsLayout(); layout(); paintMenu(); }; });
-    document.querySelectorAll("#turboSeg button").forEach(function(b){ b.onclick = function(){ prefs.turbo[b.dataset.k] = !prefs.turbo[b.dataset.k]; savePrefs(); paintMenu(); }; });
+    document.querySelectorAll("#turboSeg button").forEach(function(b){ b.onclick = function(){ T()[b.dataset.k] = !T()[b.dataset.k]; savePrefs(); paintMenu(); }; });
     el("padSize").oninput = function(){ prefs.padSize = +this.value; savePrefs(); paintMenu(); layout(); };
     el("padOp").oninput = function(){ prefs.padOp = +this.value; savePrefs(); paintMenu(); applyPadPrefs(); };
     el("padEdit").onclick = function(){ el("sheet").classList.remove("show"); el("play").classList.add("editing"); };
@@ -1314,7 +1348,7 @@
     if (/red|network/i.test(m)) txt = "No se pudo descargar una parte del emulador. Comprueba tu conexión e inténtalo de nuevo.";
     else if (/gráficos|graphics/i.test(m)) txt = "Tu navegador no ha podido iniciar los gráficos. Prueba a cambiar «Gráficos» en la pantalla de inicio.";
     else if (/núcleo|core/i.test(m)) txt = "No se pudo cargar el motor del emulador. Comprueba tu conexión e inténtalo de nuevo.";
-    else txt = "El archivo puede estar dañado o no ser un juego de " + (SYS === "gba" ? "GBA, GB o GBC" : "Nintendo DS") + "." +
+    else txt = "El archivo puede estar dañado o no ser un juego de " + (SYS === "gba" ? "GBA, GB o GBC" : SYSINFO[SYS].name) + "." +
       (SYS === "nds" ? "\nTambién puedes probar el otro motor de DS en la pantalla de inicio." : "");
     el("errMsg").textContent = txt;
     el("errbox").classList.add("show");
@@ -1327,7 +1361,7 @@
     var file = (CURRENT_ID || "").split(":").slice(1, -1).join(":");
     var game = file.replace(/\.[^.]+$/, "").replace(/\s*[\(\[][^\)\]]*[\)\]]/g, "").replace(/\s+/g, " ").trim() || "un juego";
     var ext = (file.split(".").pop() || "").toLowerCase();
-    var consoleName = SYS === "nds" ? "Nintendo DS" : ext === "gb" ? "Game Boy" : ext === "gbc" ? "Game Boy Color" : "Game Boy Advance";
+    var consoleName = SYS === "n64" ? "Nintendo 64" : SYS === "nds" ? "Nintendo DS" : ext === "gb" ? "Game Boy" : ext === "gbc" ? "Game Boy Color" : "Game Boy Advance";
     return "¡Estoy jugando a " + game + " en " + consoleName + " con Emulador Zeta!";
   }
   function shareShot(){
@@ -1494,7 +1528,12 @@
   function setupPad(sys, core){
     SYS = sys; CORE = core;
     pad.className = sys;
-    buildFace(); bindDpad(); bindFace();
+    if (sys === "n64"){
+      el("bSel").textContent = "Z"; el("bSel").dataset.k = "12";             // N64 no tiene Select: ese botón es el gatillo Z
+      var tb = document.querySelectorAll("#turboSeg button"); tb[0].dataset.k = "0"; tb[1].dataset.k = "1";
+      el("mCheats").style.display = "none";
+    }
+    buildFace(); bindDpad(); bindStick(); bindFace();
     ["bL","bR","bSel","bSta"].forEach(function(id){ bindHold(el(id)); });
     if (sys==="gba") { /* L y R existen en ambas */ }
 
