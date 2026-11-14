@@ -659,7 +659,7 @@
   function toast(msg, ms){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");}, ms || 1600); }
 
   /* ---------- Preferencias (se recuerdan en este dispositivo) ---------- */
-  var PREF_DEF = { n64perf:"max", dsLand:"side", frameskip:"off", autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
+  var PREF_DEF = { orient:"auto", n64perf:"max", dsLand:"side", frameskip:"off", autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
   var prefs = (function(){ try { return Object.assign({}, PREF_DEF, JSON.parse(store.get("prefs") || "{}")); } catch(e){ return Object.assign({}, PREF_DEF); } })();
   if (!prefs.offsets || !prefs.offsets.portrait) prefs.offsets = {portrait:{}, landscape:{}};
   function savePrefs(){ store.set("prefs", JSON.stringify(prefs)); }
@@ -736,7 +736,36 @@
   }
 
   var stx = 1;
+  /* Bloqueo de orientación: iOS no deja bloquearla desde una web, así que si el móvil gira y la orientación
+     está fijada, la pantalla de juego se gira 90° en sentido contrario para que todo siga igual */
+  var ROT = 0, lastLandAngle = 90;
+  function deviceAngle(){
+    var a = (screen.orientation && typeof screen.orientation.angle === "number") ? screen.orientation.angle : (window.orientation || 0);
+    return ((a % 360) + 360) % 360;
+  }
+  function applyRotation(){
+    var play = el("play"), vw = window.innerWidth, vh = window.innerHeight, devLand = vw > vh, ang = deviceAngle();
+    if (devLand && (ang === 90 || ang === 270)) lastLandAngle = ang;
+    var want = prefs.orient === "auto" ? (devLand ? "landscape" : "portrait") : prefs.orient;
+    var rot = 0;
+    if (want === "landscape" && !devLand) rot = lastLandAngle === 270 ? -90 : 90;
+    else if (want === "portrait" && devLand) rot = ang === 270 ? 90 : -90;
+    ROT = rot;
+    play.classList.toggle("rot", !!rot);
+    if (rot){
+      play.style.cssText = "display:block;inset:auto;width:" + vh + "px;height:" + vw + "px;left:" + ((vw - vh) / 2) + "px;top:" + ((vh - vw) / 2) + "px;transform:rotate(" + rot + "deg)";
+    } else play.style.cssText = "display:block";
+  }
+  // Pasa un toque (coordenadas de pantalla) a coordenadas locales del elemento, teniendo en cuenta el giro
+  function localPt(e, node){
+    var rc = node.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2;
+    var dx = e.clientX - cx, dy = e.clientY - cy, a = -ROT * Math.PI / 180;
+    var lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    var sc = (prefs.padSize || 100) / 100, w = node.offsetWidth * (node.closest("#pad") ? sc : 1), h = node.offsetHeight * (node.closest("#pad") ? sc : 1);
+    return {dx: lx, dy: ly, x: lx + w / 2, y: ly + h / 2, w: w, h: h};
+  }
   function layout(){
+    if (started) applyRotation();
     var W = stage.clientWidth, H = stage.clientHeight;
     if (!W || !H) return;
     var wasLand = landscape;
@@ -886,8 +915,8 @@
   function bindStick(){
     var st = el("stick"), id = null;
     var move = function(e){
-      var rc = st.getBoundingClientRect(), R = rc.width * 0.36;
-      var dx = (e.clientX - (rc.left + rc.width/2)) / R, dy = (e.clientY - (rc.top + rc.height/2)) / R, d = Math.hypot(dx, dy);
+      var lp = localPt(e, st), R = lp.w * 0.36;
+      var dx = lp.dx / R, dy = lp.dy / R, d = Math.hypot(dx, dy);
       if (d > 1){ dx /= d; dy /= d; }
       if (d < 0.14){ dx = 0; dy = 0; }
       stickSet(dx, dy);
@@ -909,10 +938,9 @@
     });
   }
   function dirsFrom(e){
-    var rc = el("dpad").getBoundingClientRect();
-    var dx = e.clientX - (rc.left + rc.width/2), dy = e.clientY - (rc.top + rc.height/2);
+    var lp = localPt(e, el("dpad")), dx = lp.dx, dy = lp.dy;
     var none = {u:0,d:0,l:0,r:0};
-    if (Math.hypot(dx,dy) < rc.width*0.12) return none;           // zona muerta central
+    if (Math.hypot(dx,dy) < lp.w*0.12) return none;           // zona muerta central
     var sector = ((Math.round(Math.atan2(dy,dx) / (Math.PI/4)) % 8) + 8) % 8;   // 0=dcha, 1=abajo-dcha, ...
     var map = [{r:1},{r:1,d:1},{d:1},{d:1,l:1},{l:1},{l:1,u:1},{u:1},{u:1,r:1}][sector];
     return {u:map.u|0, d:map.d|0, l:map.l|0, r:map.r|0};
@@ -928,7 +956,7 @@
   // Botones de acción: se puede deslizar y pulsar dos a la vez tocando entre ellos
   var facePointers = {}, faceState = {};
   function faceHits(e){
-    var rc = el("face").getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top, S = rc.width, hit = [], best=null, bd=1e9;
+    var lp = localPt(e, el("face")), x = lp.x, y = lp.y, S = lp.w, hit = [], best=null, bd=1e9;
     var k = S / (el("face").offsetWidth || S);          // escala elegida por el usuario
     faceBtns.forEach(function(b){
       var dist = Math.hypot(x - b.x*S, y - b.y*S);
@@ -1002,6 +1030,24 @@
   pad.addEventListener("touchstart", function(e){ if (e.cancelable) e.preventDefault(); }, {passive:false});
   pad.addEventListener("touchmove", function(e){ if (e.cancelable) e.preventDefault(); }, {passive:false});
   document.addEventListener("selectstart", function(e){ if (started && !(e.target.closest && e.target.closest("input, textarea"))) e.preventDefault(); });
+  (function(){
+    var down = false;
+    function fwd(type, t, canvas){
+      var lp = localPt(t, canvas), rc = canvas.getBoundingClientRect();
+      var cx = rc.left + lp.x / lp.w * rc.width, cy = rc.top + lp.y / lp.h * rc.height;
+      canvas.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, clientX:cx, clientY:cy, button:0, buttons: type === "mouseup" ? 0 : 1}));
+    }
+    ["touchstart","touchmove","touchend","touchcancel"].forEach(function(ev){
+      stage.addEventListener(ev, function(e){
+        if (!ROT || SYS !== "nds" || !e.target.classList || !e.target.classList.contains("ejs_canvas")) return;
+        e.stopPropagation(); if (e.cancelable) e.preventDefault();
+        var t = e.changedTouches[0]; if (!t) return;
+        if (ev === "touchstart"){ down = true; fwd("mousemove", t, e.target); fwd("mousedown", t, e.target); }
+        else if (ev === "touchmove"){ if (down) fwd("mousemove", t, e.target); }
+        else { if (down) fwd("mouseup", t, e.target); down = false; }
+      }, {capture:true, passive:false});
+    });
+  })();
   var releasers = [];
   // Red de seguridad contra botones "atascados": si iOS no avisa de que se ha levantado un dedo
   // (gestos del sistema, notificaciones…), al no quedar ningún dedo en la pantalla se suelta todo.
@@ -1182,7 +1228,8 @@
   function n64Opts(){ return N64PERF[prefs.n64perf] || N64PERF.max; }
   function applyN64Perf(){
     var g = gm(); if (!g || SYS !== "n64") return;
-    var o = n64Opts(); Object.keys(o).forEach(function(k){ try { g.setVariable(k, o[k]); } catch(e){} });
+    // la resolución interna no se cambia en marcha (la imagen se quedaba pequeña): se aplica al abrir el juego
+    var o = n64Opts(); Object.keys(o).forEach(function(k){ if (k !== "parallel-n64-screensize") try { g.setVariable(k, o[k]); } catch(e){} });
   }
   function frameskipSupported(){ return CORE === "mgba" || CORE === "desmume2015"; }
   function applyFF(){ try { E_().menuOptionChanged("ff-ratio", prefs.ff); } catch(e){} }
@@ -1262,6 +1309,7 @@
     paintSegV("landSeg", prefs.landMode);
     paintSegV("dsLandSeg", prefs.dsLand);
     paintSegV("n64Seg", prefs.n64perf);
+    paintSegV("orientSeg", prefs.orient);
     el("n64Opts").style.display = SYS === "n64" ? "" : "none";
     paintSegV("fsSeg", prefs.frameskip || "off");
     el("fsOpts").style.display = frameskipSupported() ? "" : "none";
@@ -1402,8 +1450,13 @@
     document.querySelectorAll("#filterSeg button").forEach(function(b){ b.onclick = function(){ prefs.filter = b.dataset.v; savePrefs(); applyFilter(); paintMenu(); }; });
     document.querySelectorAll("#dsLandSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsLand = b.dataset.v; savePrefs(); hybridGeo = null; applyDsLayout(); layout(); paintMenu();
       if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
+    document.querySelectorAll("#orientSeg button").forEach(function(b){ b.onclick = function(){
+      prefs.orient = b.dataset.v === "lock" ? (landscape ? "landscape" : "portrait") : b.dataset.v;
+      savePrefs(); paintMenu(); layout();
+      toast(prefs.orient === "auto" ? "La pantalla girará con el móvil" : "Orientación fijada en " + (prefs.orient === "landscape" ? "horizontal" : "vertical"));
+    }; });
     document.querySelectorAll("#n64Seg button").forEach(function(b){ b.onclick = function(){ prefs.n64perf = b.dataset.v; savePrefs(); applyN64Perf(); paintMenu();
-      toast("Guardado. Si no notas el cambio, sal del juego y vuelve a abrirlo.", 3500); }; });
+      toast("Hecho. La nitidez cambiará la próxima vez que abras el juego.", 3500); }; });
     document.querySelectorAll("#fsSeg button").forEach(function(b){ b.onclick = function(){ prefs.frameskip = b.dataset.v; savePrefs(); applyFrameskip(); paintMenu(); }; });
     document.querySelectorAll("#landSeg button").forEach(function(b){ b.onclick = function(){ prefs.landMode = b.dataset.v; savePrefs(); layout(); paintMenu();
       if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
@@ -1434,8 +1487,9 @@
       if (!drag || e.pointerId !== drag.id) return;
       e.stopPropagation();
       var cl = function(v, a, b){ return Math.max(a, Math.min(b, v)); };     // que el botón no se salga de la pantalla
-      var dx = cl(e.clientX - drag.x, drag.s.left - drag.r.left, drag.s.right - drag.r.right);
-      var dy = cl(e.clientY - drag.y, drag.s.top - drag.r.top, drag.s.bottom - drag.r.bottom);
+      var mx = e.clientX - drag.x, my = e.clientY - drag.y, dx, dy;
+      if (ROT){ var a = -ROT * Math.PI / 180; dx = mx * Math.cos(a) - my * Math.sin(a); dy = mx * Math.sin(a) + my * Math.cos(a); }
+      else { dx = cl(mx, drag.s.left - drag.r.left, drag.s.right - drag.r.right); dy = cl(my, drag.s.top - drag.r.top, drag.s.bottom - drag.r.bottom); }
       var v = [Math.round(drag.o[0] + dx), Math.round(drag.o[1] + dy)];
       prefs.offsets[drag.key][drag.n.id] = v;
       drag.n.style.translate = v[0] + "px " + v[1] + "px";

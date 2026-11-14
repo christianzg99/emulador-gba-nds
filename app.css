@@ -369,3 +369,5 @@
   .slot .bt button.del{color:#ff9a80}
   .slot .bt button[hidden]{display:none}
   .sheet .seg small{display:block;font-weight:400;font-size:11px;opacity:.8;margin-top:2px}
+  #play.rot{position:fixed;transform-origin:50% 50%}
+  #play.rot #stage{inset:0}
