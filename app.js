@@ -123,6 +123,7 @@
     function putState(id, blob){ return tx(["states"], "readwrite", function(t){ t.objectStore("states").put({blob:blob, ts:Date.now()}, id); }); }
     function getState(id){ return tx(["states"], "readonly", function(t){ return t.objectStore("states").get(id); }); }
     function putSlot(id, n, rec){ return tx(["slots"], "readwrite", function(t){ t.objectStore("slots").put(rec, id + "#" + n); }); }
+    function delSlot(id, n){ return tx(["slots"], "readwrite", function(t){ t.objectStore("slots").delete(id + "#" + n); }); }
     function getSlot(id, n){ return tx(["slots"], "readonly", function(t){ return t.objectStore("slots").get(id + "#" + n); }); }
     // Lo que ocupa cada juego: copia del juego, "continuar" y ranuras
     function sizes(){
@@ -156,7 +157,7 @@
       });
     }
     return {list:list, save:save, get:get, remove:remove, clearExtras:clearExtras, putState:putState, getState:getState,
-            setThumb:setThumb, addTime:addTime, update:update, putSlot:putSlot, getSlot:getSlot, sizes:sizes, dumpExtras:dumpExtras, loadExtras:loadExtras};
+            setThumb:setThumb, addTime:addTime, update:update, putSlot:putSlot, getSlot:getSlot, delSlot:delSlot, sizes:sizes, dumpExtras:dumpExtras, loadExtras:loadExtras};
   })();
 
   function gameId(file, sys){ return sys + ":" + file.name + ":" + file.size; }
@@ -211,7 +212,7 @@
           var u = URL.createObjectURL(it.thumb); libUrls.push(u);
           var im2 = new Image(); im2.onload = function(){ tag.classList.add("shot"); tag.appendChild(im2); }; im2.src = u;
         };
-        img.src = artUrl(it);
+        if (it.cover){ var cu = URL.createObjectURL(it.cover); libUrls.push(cu); img.src = cu; } else img.src = artUrl(it);
         b.addEventListener("click", function(e){
           if (e.target.closest(".fav")){ Recent.update(it.id, function(r){ r.fav = !r.fav; }).then(renderRecent); return; }
           if (e.target.closest(".more")){ openGameSheet(it, s); return; }
@@ -246,7 +247,7 @@
       if (rcUrl) URL.revokeObjectURL(rcUrl);
       rcUrl = URL.createObjectURL(last.thumb); art.innerHTML = ""; art.classList.add("shot"); art.style.backgroundImage = 'url("' + rcUrl + '")';
     };
-    img.src = artUrl(last);
+    if (last.cover){ if (rcUrl) URL.revokeObjectURL(rcUrl); rcUrl = URL.createObjectURL(last.cover); img.src = rcUrl; } else img.src = artUrl(last);
     card.querySelector(".rc-play").onclick = function(){
       var btn = this; btn.textContent = "Cargando…"; btn.disabled = true;
       Recent.get(last.id).then(function(blob){
@@ -281,6 +282,22 @@
     document.getElementById("gsFav").textContent = it.fav ? "Quitar de favoritos" : "Marcar como favorito";
     document.getElementById("gsFav").onclick = function(){ Recent.update(it.id, function(r){ r.fav = !r.fav; }).then(function(){ w.classList.remove("show"); renderRecent(); }); };
     var armedX = false, armedR = false;
+    // Portada: elegir una imagen propia (se reduce para no ocupar espacio)
+    var cv = document.getElementById("gsCover"), cvr = document.getElementById("gsCoverReset");
+    cv.textContent = it.cover ? "Cambiar portada" : "Elegir portada";
+    cvr.style.display = it.cover ? "" : "none";
+    cv.onclick = function(){ var f = document.getElementById("coverFile"); f.value = ""; f.onchange = function(){
+      var file = this.files[0]; if (!file) return;
+      createImageBitmap(file).then(function(bm){
+        var k = Math.min(1, 512 / Math.max(bm.width, bm.height)), c = document.createElement("canvas");
+        c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k);
+        c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height);
+        c.toBlob(function(b){
+          Recent.update(it.id, function(r){ r.cover = b; }).then(function(){ w.classList.remove("show"); renderRecent(); showOk("Portada cambiada."); });
+        }, "image/jpeg", 0.88);
+      }).catch(function(){ showErr("No se pudo leer esa imagen. Prueba con una foto JPG o PNG."); });
+    }; f.click(); };
+    cvr.onclick = function(){ Recent.update(it.id, function(r){ delete r.cover; }).then(function(){ w.classList.remove("show"); renderRecent(); showOk("Vuelve a usarse la portada automática."); }); };
     document.getElementById("gsExtras").textContent = "Borrar guardados rápidos y continuar (" + mb(s.extra) + ")";
     document.getElementById("gsExtras").onclick = function(){
       if (!armedX){ armedX = true; this.textContent = "Toca otra vez para borrarlos"; return; }
@@ -452,6 +469,8 @@
         x.meta.forEach(function(m, i){
           var mm = Object.assign({}, m); delete mm.thumb;
           if (m.thumb){ mm.thumbFile = "_emulador/capturas/" + i + ".png"; files.push({name: mm.thumbFile, data: m.thumb}); }
+          delete mm.cover;
+          if (m.cover){ mm.coverFile = "_emulador/portadas/" + i + ".jpg"; files.push({name: mm.coverFile, data: m.cover}); }
           man.meta.push(mm);
         });
         if (full){
@@ -514,7 +533,7 @@
           var steps = [saves.length ? writeAll(saves) : Promise.resolve(0)];
           if (man){
             steps.push(Recent.loadExtras({
-              meta: (man.meta || []).map(function(m){ var mm = Object.assign({}, m); mm.thumb = blob(m.thumbFile, "image/png"); delete mm.thumbFile; return mm; }),
+              meta: (man.meta || []).map(function(m){ var mm = Object.assign({}, m); mm.thumb = blob(m.thumbFile, "image/png"); delete mm.thumbFile; mm.cover = blob(m.coverFile, "image/jpeg"); delete mm.coverFile; if (!mm.cover) delete mm.cover; return mm; }),
               states: (man.states || []).filter(function(st){ return extra[st.file]; }).map(function(st){ return {id: st.id, ts: st.ts, blob: new Blob([extra[st.file]])}; }),
               slots: (man.slots || []).filter(function(sl){ return extra[sl.file]; }).map(function(sl){ return {key: sl.key, ts: sl.ts, blob: new Blob([extra[sl.file]]), thumb: blob(sl.thumb, "image/png")}; })
             }));
@@ -612,7 +631,7 @@
     window.EJS_startButtonName = "Jugar";
     window.EJS_backgroundColor = "#000";
     window.EJS_Buttons = { netplay:false, cheat:false, cacheManager:false, exitEmulation:false, fullscreen:false, screenRecord:false, quickSave:false, quickLoad:false, screenshot:false, contextMenu:false };
-    window.EJS_defaultOptions = { "save-state-location": "browser" };
+    window.EJS_defaultOptions = { "save-state-location": "browser", "desmume_pointer_type": "touch", "melonds_touch_mode": "Touch", "desmume_hybrid_showboth_screens": "disabled" };
     // EmulatorJS guardaba su propia copia de cada juego (duplicando el espacio): la biblioteca ya tiene la suya
     window.EJS_disableDatabases = true;
     // Ajustes de EmulatorJS que no sirven aquí o que ya gestiona nuestro menú
@@ -640,7 +659,7 @@
   function toast(msg, ms){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");}, ms || 1600); }
 
   /* ---------- Preferencias (se recuerdan en este dispositivo) ---------- */
-  var PREF_DEF = { autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
+  var PREF_DEF = { dsLand:"side", frameskip:"off", autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
   var prefs = (function(){ try { return Object.assign({}, PREF_DEF, JSON.parse(store.get("prefs") || "{}")); } catch(e){ return Object.assign({}, PREF_DEF); } })();
   if (!prefs.offsets || !prefs.offsets.portrait) prefs.offsets = {portrait:{}, landscape:{}};
   function savePrefs(){ store.set("prefs", JSON.stringify(prefs)); }
@@ -673,12 +692,25 @@
 
   // Proporción de la imagen: GBA 3:2; DS una pantalla 4:3, apiladas 2:3 o lado a lado 8:3
   function dsSingle(){ return prefs.dsMode === "top" || prefs.dsMode === "bottom"; }
-  function aspect(){ return SYS==="n64" ? 4/3 : SYS==="gba" ? 3/2 : dsSingle() ? 4/3 : (landscape ? 8/3 : 2/3); }
+  // Horizontal "pantalla grande": una pantalla grande y la otra pequeña a su derecha (modo híbrido del motor)
+  function dsHybrid(){ return SYS === "nds" && landscape && prefs.dsLand === "big" && !dsSingle(); }
+  var hybridGeo = null;        // {w,h} del fotograma real, medido al activar el modo
+  function hybSmall(){ return CORE === "melonds" ? [0.5, 1] : [0.495, 0.83]; }     // alto ocupado por la pantalla pequeña (fracción)
+  function hybBig(){ return CORE === "melonds" ? 512 / (hybridGeo ? hybridGeo.w : 772) : 0.75; }
+  function aspect(){ return SYS==="n64" ? 4/3 : SYS==="gba" ? 3/2 : dsSingle() ? 4/3 : dsHybrid() ? (hybridGeo ? hybridGeo.w / hybridGeo.h : (CORE === "melonds" ? 2 : 16/9)) : (landscape ? 8/3 : 2/3); }
   function nativeW(){ return SYS==="n64" ? 320 : SYS==="gba" ? 240 : (landscape && !dsSingle()) ? 512 : 256; }
 
   function applyDsLayout(){
     if (SYS!=="nds" || !gm()) return;
     var m = prefs.dsMode, mel = CORE==="melonds", v;
+    if (dsHybrid()){
+      var bigBottom = m === "swap";
+      v = mel ? (bigBottom ? "Hybrid Bottom" : "Hybrid Top") : (bigBottom ? "hybrid/bottom" : "hybrid/top");
+      try { if (mel) gm().setVariable("melonds_hybrid_small_screen", bigBottom ? "Top" : "Bottom"); else gm().setVariable("desmume_hybrid_showboth_screens", "disabled"); } catch(e){}
+      try { gm().setVariable(mel ? "melonds_screen_layout" : "desmume_screens_layout", v); } catch(e){}
+      measureHybrid();
+      return;
+    }
     if (m === "top") v = mel ? "Top Only" : "top only";
     else if (m === "bottom") v = mel ? "Bottom Only" : "bottom only";
     else if (m === "swap") v = landscape ? (mel ? "Right/Left" : "right/left") : (mel ? "Bottom/Top" : "bottom/top");
@@ -686,6 +718,18 @@
     try { gm().setVariable(mel ? "melonds_screen_layout" : "desmume_screens_layout", v); } catch(e){}
   }
 
+  // Mide el tamaño real del fotograma en modo híbrido (cada motor lo compone distinto)
+  function measureHybrid(){
+    setTimeout(function(){
+      var g = gm(); if (!g || !dsHybrid()) return;
+      Promise.resolve(g.screenshot()).then(function(png){
+        if (!png || png.length < 24) return;
+        var dv = new DataView(png.buffer || png, png.byteOffset || 0);
+        var w = dv.getUint32(16), h = dv.getUint32(20);
+        if (w > 0 && h > 0 && (!hybridGeo || hybridGeo.w !== w || hybridGeo.h !== h)){ hybridGeo = {w:w, h:h}; layout(); }
+      }).catch(function(){});
+    }, 400);
+  }
   function place(node, r){
     var st = node.style;
     ["left","top","right","bottom","width","height"].forEach(function(k){ st[k] = (r[k]==null) ? "" : r[k]+"px"; });
@@ -698,6 +742,7 @@
     var wasLand = landscape;
     landscape = W > H;
     if (wasLand !== landscape) applyDsLayout();
+    var hyb = dsHybrid();
     var a = aspect(), sw, sh, sx, sy, m = 10;
     var face = el("face"), dpad = el("dpad");
 
@@ -715,6 +760,11 @@
       place(el("bR"), {right:m, top:top+8});
       place(dpad, {left:m+4, top:cy-size/2, width:size, height:size});
       place(el("stick"), {left:m+4, top:cy-size/2, width:size, height:size});
+      if (SYS === "n64"){        // N64: stick arriba y cruceta debajo
+        var ss = Math.min(size, 140), dd = Math.round(ss * 0.72);
+        place(el("stick"), {left:m+4, top:cy-ss/2-dd/2-4, width:ss, height:ss});
+        place(dpad, {left:m+4+(ss-dd)/2, top:cy+ss/2-dd/2+10, width:dd, height:dd});
+      }
       place(face, {right:m+4, top:cy-size/2, width:size, height:size});
       var by = 12;
       place(el("bBack"), {left:m, bottom:by});
@@ -723,6 +773,26 @@
       place(el("bFF"), {right:m+48, bottom:by});
       place(el("bMenu"), {right:m, bottom:by});
       place(el("bMic"), {left:W/2-20, top:top+8});
+    } else if (hyb){
+      // DS horizontal "pantalla grande": imagen a la izquierda a toda la altura; mandos por encima, como una consola
+      sh = H; sw = H * a; if (sw > W - 120){ sw = W - 120; sh = sw / a; }
+      sx = 0; sy = (H - sh) / 2;
+      var bigW = sw * hybBig();                                // ancho de la pantalla grande dentro de la imagen
+      var smTop = sy + sh * hybSmall()[0];                     // la pantalla pequeña queda a la derecha, en la mitad de abajo
+      var fs = Math.max(104, Math.min(150, W - sw - 6, H * 0.4));
+      var ds = Math.max(110, Math.min(150, H * 0.38));
+      var tx = bigW + 8;                                       // zona libre arriba a la derecha, encima de la pantalla pequeña
+      place(el("bL"), {left:m, top:m});
+      place(el("bR"), {right:m, top:m});
+      place(el("bMenu"), {left:tx, top:m});
+      place(el("bFF"), {left:tx + 48, top:m});
+      place(el("bSel"), {left:tx, top:m + 50});
+      place(el("bSta"), {left:tx + 84, top:m + 50});
+      place(el("bMic"), {left:tx, top:Math.min(m + 96, smTop - 46)});
+      place(dpad, {left:m + 6, top:H - ds - m - 4, width:ds, height:ds});
+      place(face, {right:m, top:H - fs - m, width:fs, height:fs});
+      place(el("bBack"), {left:m + ds + 20, bottom:m});
+      place(el("stick"), {left:m, top:m, width:0, height:0});
     } else {
       // Horizontal: pantalla centrada a toda la altura, mandos a los lados
       var side = Math.max(150, Math.min(210, W*0.2));
@@ -745,6 +815,11 @@
       place(el("bFF"), {right:m+82, top:m});
       place(dpad, {left:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
       place(el("stick"), {left:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
+      if (SYS === "n64"){
+        var s2 = Math.min(size2, (H - 120) * 0.56), d2 = Math.round(s2 * 0.7);
+        place(el("stick"), {left:(col-s2)/2, top:56, width:s2, height:s2});
+        place(dpad, {left:(col-d2)/2, top:56 + s2 + 8, width:d2, height:d2});
+      }
       place(face, {right:(col-size2)/2, top:(H-size2)/2+6, width:size2, height:size2});
       place(el("bBack"), {left:m, bottom:m});
       place(el("bSel"), {left:m+48, bottom:m+3});
@@ -757,6 +832,14 @@
     stage.style.setProperty("--px", (sw / nativeW()) + "px");
     stage.style.setProperty("--stx", String(landscape ? stx : 1));
     el("play").classList.toggle("land", landscape);
+    var sep = el("dsSep");
+    if (SYS === "nds" && !dsSingle()){
+      sep.style.display = "block";
+      if (hyb){ var bw = sw * hybBig();
+        place(sep, {left: sx + bw, top: sy + sh * hybSmall()[0], width: 1, height: sh * (hybSmall()[1] - hybSmall()[0])}); }
+      else if (landscape) place(sep, {left: sx + sw/2, top: sy, width: 1, height: sh});
+      else place(sep, {left: sx, top: sy + sh/2, width: sw, height: 1});
+    } else sep.style.display = "none";
     layoutFace();
     applyPadPrefs();
   }
@@ -771,7 +854,7 @@
       n.style.scale = String(sc);
     });
     pad.style.opacity = String((prefs.padOp || 100) / 100);
-    pad.classList.toggle("dim", !!prefs.autoDim && landscape && SYS === "gba" && prefs.landMode !== "normal");
+    pad.classList.toggle("dim", !!prefs.autoDim && landscape && ((SYS === "gba" && prefs.landMode !== "normal") || dsHybrid()));
   }
 
   // Botones de acción: GBA = A/B en diagonal; DS = rombo X/A/B/Y
@@ -914,6 +997,10 @@
   ["gesturestart","gesturechange","dblclick"].forEach(function(ev){
     document.addEventListener(ev, function(e){ if (started) e.preventDefault(); }, {passive:false});
   });
+  // iOS muestra una lupa al mantener pulsado o pulsar muchas veces: se evita en los mandos
+  pad.addEventListener("touchstart", function(e){ if (e.cancelable) e.preventDefault(); }, {passive:false});
+  pad.addEventListener("touchmove", function(e){ if (e.cancelable) e.preventDefault(); }, {passive:false});
+  document.addEventListener("selectstart", function(e){ if (started && !(e.target.closest && e.target.closest("input, textarea"))) e.preventDefault(); });
   var releasers = [];
   // Red de seguridad contra botones "atascados": si iOS no avisa de que se ha levantado un dedo
   // (gestos del sistema, notificaciones…), al no quedar ningún dedo en la pantalla se suelta todo.
@@ -1064,11 +1151,28 @@
     moveAdvanced();
     hookExternalInput();
     setTimeout(applyCheats, 800);
-    applyFF(); applyFilter();
+    applyFF(); applyFilter(); applyFrameskip();
+    // DS: la pantalla táctil funciona con el dedo (por defecto los motores esperan un ratón)
+    if (SYS === "nds") try {
+      if (CORE === "melonds") gm().setVariable("melonds_touch_mode", "Touch");
+      else gm().setVariable("desmume_pointer_type", "touch");
+    } catch(e){}
     if (CORE === "melonds") try { gm().setVariable("melonds_mic_input", "Blow Noise"); } catch(e){}
     setTimeout(saveThumb, 4000);
     perfWatch();
   }
+  function applyFrameskip(){
+    var f = prefs.frameskip || "off", g = gm(); if (!g) return;
+    try {
+      if (CORE === "mgba"){
+        g.setVariable("mgba_frameskip", f === "off" ? "disabled" : f === "auto" ? "auto" : "fixed_interval");
+        if (f === "1" || f === "2") g.setVariable("mgba_frameskip_interval", f);
+      } else if (CORE === "desmume2015"){
+        g.setVariable("desmume_frameskip", f === "off" ? "0" : f === "auto" ? "1" : f);
+      }
+    } catch(e){}
+  }
+  function frameskipSupported(){ return CORE === "mgba" || CORE === "desmume2015"; }
   function applyFF(){ try { E_().menuOptionChanged("ff-ratio", prefs.ff); } catch(e){} }
   function applyFilter(){
     var f = prefs.filter, shader = f === "smooth" ? "bicubic" : f === "crt" ? "crt-zfast" : "disabled";
@@ -1091,7 +1195,8 @@
           warned = true;
           toast(SYS === "nds" && CORE === "melonds"
             ? "El juego va lento. Prueba el motor Rápido (DeSmuME) en la pantalla de inicio."
-            : "El juego va lento. En ☰ › Avanzado puedes activar el salto de fotogramas (frameskip).", 6000);
+            : frameskipSupported() ? "El juego va lento. En ☰ › Saltar fotogramas puedes elegir «Auto» o «1»."
+            : "Este juego exige mucho al móvil. Prueba a cerrar otras apps o a usar gráficos «Compatible».", 6000);
         }
       }
       last = {f: f, t: now};
@@ -1142,6 +1247,10 @@
     paintSegV("filterSeg", prefs.filter);
     paintSegV("dsSeg", prefs.dsMode);
     paintSegV("landSeg", prefs.landMode);
+    paintSegV("dsLandSeg", prefs.dsLand);
+    paintSegV("fsSeg", prefs.frameskip || "off");
+    el("fsOpts").style.display = frameskipSupported() ? "" : "none";
+    var fa = document.querySelector('#fsSeg [data-v="auto"]'); if (fa) fa.style.display = CORE === "mgba" ? "" : "none";
     el("landOpts").style.display = SYS === "gba" ? "" : "none";
     if (SYS === "n64") document.querySelectorAll('#filterSeg [data-v="lcd"]').forEach(function(b){ b.style.display = "none"; });
     document.querySelectorAll("#turboSeg button").forEach(function(b){ b.classList.toggle("on", !!T()[b.dataset.k]); });
@@ -1158,12 +1267,13 @@
     slotUrls.forEach(function(u){ URL.revokeObjectURL(u); }); slotUrls = [];
     [1,2,3,4].forEach(function(n){
       var d = document.createElement("div"); d.className = "slot";
-      d.innerHTML = '<div class="pic">Ranura ' + n + '</div><div class="when">Vacía</div><div class="bt"><button data-a="save">Guardar</button><button data-a="load" disabled>Cargar</button></div>';
+      d.innerHTML = '<div class="pic">Ranura ' + n + '</div><div class="when">Vacía</div><div class="bt"><button data-a="save">Guardar</button><button data-a="load" disabled>Cargar</button><button data-a="del" class="del" hidden>Borrar</button></div>';
       box.appendChild(d);
       Recent.getSlot(CURRENT_ID, n).then(function(rec){
         if (!rec) return;
         d.querySelector(".when").textContent = ago(rec.ts);
         d.querySelector('[data-a="load"]').disabled = false;
+        d.querySelector('[data-a="del"]').hidden = false;
         if (rec.thumb){ var u = URL.createObjectURL(rec.thumb); slotUrls.push(u); var pic = d.querySelector(".pic"); pic.textContent = ""; pic.style.backgroundImage = "url(" + u + ")"; }
         d.dataset.full = "1";
       }).catch(function(){});
@@ -1177,6 +1287,12 @@
             .then(function(){ toast("Guardado en la ranura " + n); renderSlots(); })
             .catch(function(){ toast("No había espacio para guardar"); });
         } catch(e){ toast("Este juego no permite guardado rápido"); }
+      };
+      var armedDel = false, td;
+      d.querySelector('[data-a="del"]').onclick = function(){
+        var btn = this;
+        if (!armedDel){ armedDel = true; btn.textContent = "¿Seguro?"; clearTimeout(td); td = setTimeout(function(){ armedDel = false; btn.textContent = "Borrar"; }, 2500); return; }
+        Recent.delSlot(CURRENT_ID, n).then(function(){ toast("Ranura " + n + " borrada"); renderSlots(); }).catch(function(){ toast("No se pudo borrar"); });
       };
       d.querySelector('[data-a="load"]').onclick = function(){
         Recent.getSlot(CURRENT_ID, n).then(function(rec){
@@ -1269,9 +1385,12 @@
     }; });
     document.querySelectorAll("#ffSeg button").forEach(function(b){ b.onclick = function(){ prefs.ff = b.dataset.v; savePrefs(); applyFF(); paintMenu(); }; });
     document.querySelectorAll("#filterSeg button").forEach(function(b){ b.onclick = function(){ prefs.filter = b.dataset.v; savePrefs(); applyFilter(); paintMenu(); }; });
+    document.querySelectorAll("#dsLandSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsLand = b.dataset.v; savePrefs(); hybridGeo = null; applyDsLayout(); layout(); paintMenu();
+      if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
+    document.querySelectorAll("#fsSeg button").forEach(function(b){ b.onclick = function(){ prefs.frameskip = b.dataset.v; savePrefs(); applyFrameskip(); paintMenu(); }; });
     document.querySelectorAll("#landSeg button").forEach(function(b){ b.onclick = function(){ prefs.landMode = b.dataset.v; savePrefs(); layout(); paintMenu();
       if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
-    document.querySelectorAll("#dsSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsMode = b.dataset.v; savePrefs(); applyDsLayout(); layout(); paintMenu(); }; });
+    document.querySelectorAll("#dsSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsMode = b.dataset.v; savePrefs(); hybridGeo = null; applyDsLayout(); layout(); paintMenu(); }; });
     document.querySelectorAll("#turboSeg button").forEach(function(b){ b.onclick = function(){ T()[b.dataset.k] = !T()[b.dataset.k]; savePrefs(); paintMenu(); }; });
     el("padSize").oninput = function(){ prefs.padSize = +this.value; savePrefs(); paintMenu(); layout(); };
     el("padOp").oninput = function(){ prefs.padOp = +this.value; savePrefs(); paintMenu(); applyPadPrefs(); };

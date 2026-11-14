@@ -116,6 +116,7 @@
   <div id="stage">
     <div id="game"></div>
     <div id="lcd"></div>
+    <div id="dsSep"></div>
     <div id="pad">
       <div class="vb sh" id="bL" data-k="10">L</div>
       <div class="vb sh" id="bR" data-k="11">R</div>
@@ -164,6 +165,11 @@
           <div class="seg" id="savSeg"><button id="savExport">Exportar .sav</button><button id="savImport">Importar .sav</button></div>
           <input type="file" id="savFile" hidden>
 
+          <div id="fsOpts">
+            <h4>Saltar fotogramas (si el juego va lento)</h4>
+            <div class="seg four" id="fsSeg"><button data-v="off">No</button><button data-v="auto">Auto</button><button data-v="1">1</button><button data-v="2">2</button></div>
+          </div>
+
           <h4>Velocidad del avance rápido</h4>
           <div class="seg" id="ffSeg"><button data-v="2.0">×2</button><button data-v="3.0">×3</button><button data-v="4.0">×4</button><button data-v="8.0">×8</button></div>
 
@@ -184,6 +190,8 @@
           <div id="dsOpts">
             <h4>Pantallas de DS</h4>
             <div class="seg four" id="dsSeg"><button data-v="normal">Normal</button><button data-v="swap">Invertidas</button><button data-v="top">Solo arriba</button><button data-v="bottom">Solo abajo</button></div>
+            <h4>DS en horizontal</h4>
+            <div class="seg" id="dsLandSeg"><button data-v="side">Una al lado de otra</button><button data-v="big">Pantalla grande</button></div>
           </div>
 
           <h4>Botones en pantalla</h4>
@@ -232,6 +240,7 @@
 </section>
 
 <input type="file" id="file" hidden>
+<input type="file" id="coverFile" accept="image/*" hidden>
 
 <div id="gameSheet" class="sheetwrap fixed">
   <div class="sheet">
@@ -240,6 +249,8 @@
       <p id="gsInfo" class="gsinfo"></p>
       <div class="gslist">
         <button id="gsFav"></button>
+        <button id="gsCover"></button>
+        <button id="gsCoverReset">Usar la portada automática</button>
         <button id="gsExtras"></button>
         <button id="gsRemove" class="danger"></button>
       </div>

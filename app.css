@@ -357,3 +357,14 @@
   #face .fb.cbtn{background:rgba(255,198,41,.28);border-color:rgba(255,198,41,.6)}
   .card.wide{width:100%}
   #pad.n64 #bSel{min-width:64px;font-weight:800;font-size:15px}
+
+  /* Sin lupa ni selección de texto de iOS durante la partida */
+  #play,#play *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  #play input,#play textarea{-webkit-user-select:text;user-select:text}
+  /* Línea fina entre las dos pantallas de DS */
+  #dsSep{display:none;position:absolute;z-index:3;pointer-events:none;background:rgba(255,255,255,.28)}
+  /* N64: cruceta además del stick */
+  #pad.n64 #dpad{display:block}
+  /* Ranuras: borrar */
+  .slot .bt button.del{color:#ff9a80}
+  .slot .bt button[hidden]{display:none}
