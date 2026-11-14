@@ -214,7 +214,7 @@
         };
         if (it.cover){ var cu = URL.createObjectURL(it.cover); libUrls.push(cu); img.src = cu; } else img.src = artUrl(it);
         b.addEventListener("click", function(e){
-          if (e.target.closest(".fav")){ Recent.update(it.id, function(r){ r.fav = !r.fav; }).then(renderRecent); return; }
+          if (e.target.closest(".fav")){ setFav(it, !it.fav, e.target.closest(".fav")); return; }
           if (e.target.closest(".more")){ openGameSheet(it, s); return; }
           if (!hasRom){ pickedSys = it.sys; fileInput.value = ""; fileInput.click(); return; }
           b.classList.add("loading"); b.querySelector(".mt").textContent = "Cargando…";
@@ -256,6 +256,18 @@
       }).catch(function(){ btn.textContent = "Continuar"; btn.disabled = false; showErr("No se pudo abrir. Ábrelo de nuevo desde Archivos."); });
     };
   }
+  // Favorito: se fija el valor elegido (no se alterna), así un toque doble no lo deja como estaba
+  var favBusy = {};
+  function setFav(it, val, star){
+    if (favBusy[it.id]) return;
+    favBusy[it.id] = true; it.fav = val;
+    if (star) star.classList.toggle("on", val);
+    Recent.update(it.id, function(r){ r.fav = val; }).then(function(){
+      toast(val ? "Añadido a favoritos" : "Quitado de favoritos");
+      renderRecent();
+    }).catch(function(){ showErr("No se pudo cambiar el favorito."); })
+      .then(function(){ setTimeout(function(){ delete favBusy[it.id]; }, 400); });
+  }
   function renderStorage(items, sz){
     var total = 0; Object.keys(sz).forEach(function(k){ total += sz[k].rom + sz[k].extra; });
     var elx = document.getElementById("libStore");
@@ -280,7 +292,7 @@
       it.playTime ? "Jugado " + dur(it.playTime) : "Sin tiempo de juego registrado",
       "Copia del juego: " + mb(s.rom), "Guardados rápidos y continuar: " + mb(s.extra)].join("\n");
     document.getElementById("gsFav").textContent = it.fav ? "Quitar de favoritos" : "Marcar como favorito";
-    document.getElementById("gsFav").onclick = function(){ Recent.update(it.id, function(r){ r.fav = !r.fav; }).then(function(){ w.classList.remove("show"); renderRecent(); }); };
+    document.getElementById("gsFav").onclick = function(){ w.classList.remove("show"); setFav(it, !it.fav); };
     var armedX = false, armedR = false;
     // Portada: elegir una imagen propia (se reduce para no ocupar espacio)
     var cv = document.getElementById("gsCover"), cvr = document.getElementById("gsCoverReset");
@@ -1125,11 +1137,15 @@
       el("contWhen").textContent = "Guardado " + ago(rec.ts);
       el("cont").classList.add("show");
       var close = function(){ continueOpen = false; el("cont").classList.remove("show"); try { E.play(); } catch(e){} };
+      // se lee antes, para cargarla en el mismo toque de «Continuar» (iOS solo deja activar el sonido dentro de un toque)
+      var bufP = rec.blob.arrayBuffer(), buf = null; bufP.then(function(b){ buf = b; });
       el("contYes").onclick = function(){
-        rec.blob.arrayBuffer().then(function(buf){
-          try { gm().loadState(new Uint8Array(buf)); toast("Partida recuperada"); } catch(e){ toast("No se pudo cargar el guardado automático"); }
-          close();
-        });
+        var go = function(b){
+          try { gm().loadState(new Uint8Array(b)); toast("Partida recuperada"); } catch(e){ toast("No se pudo cargar el guardado automático"); }
+          audioCtxs().forEach(function(c){ try { c.resume(); } catch(e){} });
+          close(); kickAudio();
+        };
+        if (buf) go(buf); else bufP.then(go);
       };
       el("contNo").onclick = close;
     }).catch(function(){});
@@ -1148,9 +1164,31 @@
     if (!gameStarted) return;
     el("resume").classList.add("show");
   }
+  // Tras cargar una partida (sobre todo en N64) el sonido podía quedarse parado: se vuelve a poner en marcha
+  function kickAudio(){
+    [100, 600, 1500].forEach(function(t){ setTimeout(function(){
+      audioCtxs().forEach(function(c){ try { if (c.state !== "running") c.resume(); } catch(e){} });
+      try {
+        var AL = E_().Module.AL, cx = AL.currentCtx;
+        Object.keys(cx.sources || {}).forEach(function(k){
+          var src = cx.sources[k];
+          if (src && src.state !== 0x1012 && (src.bufQueue || []).length) AL.setSourceState(src, 0x1012);   // 0x1012 = AL_PLAYING
+        });
+      } catch(e){}
+    }, t); });
+  }
+  // Si el sonido se ha quedado parado (al cargar partidas de N64 el motor reinicia el audio), el siguiente
+  // toque en cualquier botón lo vuelve a activar: iOS solo permite reanudarlo dentro de un toque
+  ["touchend","pointerup","click"].forEach(function(ev){
+    document.addEventListener(ev, function(){
+      if (!gameStarted) return;
+      audioCtxs().forEach(function(c){ try { if (c.state !== "running" && c.state !== "closed") c.resume(); } catch(e){} });
+    }, true);
+  });
   function doResume(){
     el("resume").classList.remove("show");
     audioCtxs().forEach(function(c){ try { c.resume(); } catch(e){} });
+    kickAudio();
     var E = window.EJS_emulator;
     if (pausedByUs && E){ try { E.play(); } catch(e){} }
     pausedByUs = false;
@@ -1361,7 +1399,7 @@
         Recent.getSlot(CURRENT_ID, n).then(function(rec){
           if (!rec) return;
           return rec.blob.arrayBuffer().then(function(buf){
-            gm().loadState(new Uint8Array(buf)); keepPaused = false; closeSheets(); toast("Ranura " + n + " cargada");
+            gm().loadState(new Uint8Array(buf)); keepPaused = false; closeSheets(); toast("Ranura " + n + " cargada"); kickAudio();
           });
         }).catch(function(){ toast("No se pudo cargar"); });
       };
