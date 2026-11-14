@@ -631,7 +631,7 @@
     window.EJS_startButtonName = "Jugar";
     window.EJS_backgroundColor = "#000";
     window.EJS_Buttons = { netplay:false, cheat:false, cacheManager:false, exitEmulation:false, fullscreen:false, screenRecord:false, quickSave:false, quickLoad:false, screenshot:false, contextMenu:false };
-    window.EJS_defaultOptions = { "save-state-location": "browser", "desmume_pointer_type": "touch", "melonds_touch_mode": "Touch", "desmume_hybrid_showboth_screens": "disabled" };
+    window.EJS_defaultOptions = Object.assign(sys === "n64" ? n64Opts() : {}, { "save-state-location": "browser", "desmume_pointer_type": "touch", "melonds_touch_mode": "Touch", "desmume_hybrid_showboth_screens": "disabled" });
     // EmulatorJS guardaba su propia copia de cada juego (duplicando el espacio): la biblioteca ya tiene la suya
     window.EJS_disableDatabases = true;
     // Ajustes de EmulatorJS que no sirven aquí o que ya gestiona nuestro menú
@@ -659,7 +659,7 @@
   function toast(msg, ms){ var t=el("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(function(){t.classList.remove("show");}, ms || 1600); }
 
   /* ---------- Preferencias (se recuerdan en este dispositivo) ---------- */
-  var PREF_DEF = { dsLand:"side", frameskip:"off", autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
+  var PREF_DEF = { n64perf:"max", dsLand:"side", frameskip:"off", autoDim:true, landMode:"normal", ff:"3.0", filter:"sharp", dsMode:"normal", padSize:100, padOp:100, turbo:{}, offsets:{portrait:{}, landscape:{}}, silentSound:true, haptics:true };
   var prefs = (function(){ try { return Object.assign({}, PREF_DEF, JSON.parse(store.get("prefs") || "{}")); } catch(e){ return Object.assign({}, PREF_DEF); } })();
   if (!prefs.offsets || !prefs.offsets.portrait) prefs.offsets = {portrait:{}, landscape:{}};
   function savePrefs(){ store.set("prefs", JSON.stringify(prefs)); }
@@ -779,18 +779,19 @@
       sx = 0; sy = (H - sh) / 2;
       var bigW = sw * hybBig();                                // ancho de la pantalla grande dentro de la imagen
       var smTop = sy + sh * hybSmall()[0];                     // la pantalla pequeña queda a la derecha, en la mitad de abajo
-      var fs = Math.max(104, Math.min(150, W - sw - 6, H * 0.4));
+      var mg = W - sw;                                         // columna libre a la derecha de la imagen
+      var fs = Math.max(96, Math.min(150, mg - 2*m, H * 0.42));
       var ds = Math.max(110, Math.min(150, H * 0.38));
-      var tx = bigW + 8;                                       // zona libre arriba a la derecha, encima de la pantalla pequeña
+      var tx = bigW + 8, row2 = m + 50;                        // zona libre arriba a la derecha, encima de la pantalla pequeña
       place(el("bL"), {left:m, top:m});
       place(el("bR"), {right:m, top:m});
       place(el("bMenu"), {left:tx, top:m});
       place(el("bFF"), {left:tx + 48, top:m});
-      place(el("bSel"), {left:tx, top:m + 50});
-      place(el("bSta"), {left:tx + 84, top:m + 50});
-      place(el("bMic"), {left:tx, top:Math.min(m + 96, smTop - 46)});
+      place(el("bSel"), {left:tx, top:row2});
+      place(el("bSta"), {left:tx + 84, top:row2});
+      place(el("bMic"), {right:m, top:row2});
       place(dpad, {left:m + 6, top:H - ds - m - 4, width:ds, height:ds});
-      place(face, {right:m, top:H - fs - m, width:fs, height:fs});
+      place(face, {right:m + Math.max(0, (mg - 2*m - fs) / 2), top:Math.max(smTop, H - fs - m), width:fs, height:fs});
       place(el("bBack"), {left:m + ds + 20, bottom:m});
       place(el("stick"), {left:m, top:m, width:0, height:0});
     } else {
@@ -836,9 +837,9 @@
     if (SYS === "nds" && !dsSingle()){
       sep.style.display = "block";
       if (hyb){ var bw = sw * hybBig();
-        place(sep, {left: sx + bw, top: sy + sh * hybSmall()[0], width: 1, height: sh * (hybSmall()[1] - hybSmall()[0])}); }
-      else if (landscape) place(sep, {left: sx + sw/2, top: sy, width: 1, height: sh});
-      else place(sep, {left: sx, top: sy + sh/2, width: sw, height: 1});
+        place(sep, {left: sx + bw - 1.5, top: sy + sh * hybSmall()[0], width: 3, height: sh * (hybSmall()[1] - hybSmall()[0])}); }
+      else if (landscape) place(sep, {left: sx + sw/2 - 1.5, top: sy, width: 3, height: sh});
+      else place(sep, {left: sx, top: sy + sh/2 - 1.5, width: sw, height: 3});
     } else sep.style.display = "none";
     layoutFace();
     applyPadPrefs();
@@ -1057,7 +1058,7 @@
       return Recent.putState(CURRENT_ID, new Blob([st])).catch(function(){});
     } catch(e){ return Promise.resolve(); }
   }
-  setInterval(function(){ if (gameStarted && !document.hidden){ flushSaves(); if (!anySheet()) saveThumb(); } }, 30000);
+  setInterval(function(){ if (gameStarted && !document.hidden) flushSaves(); }, 30000);
 
   // MUY IMPORTANTE: al recargar o cerrar la página, EmulatorJS ejecuta su "salida", que desmonta la carpeta
   // de partidas mientras aún se está guardando y acaba BORRANDO todas las partidas de IndexedDB.
@@ -1151,7 +1152,7 @@
     moveAdvanced();
     hookExternalInput();
     setTimeout(applyCheats, 800);
-    applyFF(); applyFilter(); applyFrameskip();
+    applyFF(); applyFilter(); applyFrameskip(); applyN64Perf();
     // DS: la pantalla táctil funciona con el dedo (por defecto los motores esperan un ratón)
     if (SYS === "nds") try {
       if (CORE === "melonds") gm().setVariable("melonds_touch_mode", "Touch");
@@ -1171,6 +1172,17 @@
         g.setVariable("desmume_frameskip", f === "off" ? "0" : f === "auto" ? "1" : f);
       }
     } catch(e){}
+  }
+  // N64: ajustes del motor según el rendimiento elegido (resolución interna, precisión gráfica y refresco)
+  var N64PERF = {
+    max:  {"parallel-n64-screensize":"320x240", "parallel-n64-gfxplugin-accuracy":"low",      "parallel-n64-virefresh":"1500", "parallel-n64-dithering":"disabled"},
+    mid:  {"parallel-n64-screensize":"640x480", "parallel-n64-gfxplugin-accuracy":"medium",   "parallel-n64-virefresh":"auto", "parallel-n64-dithering":"disabled"},
+    high: {"parallel-n64-screensize":"640x480", "parallel-n64-gfxplugin-accuracy":"veryhigh", "parallel-n64-virefresh":"auto", "parallel-n64-dithering":"enabled"}
+  };
+  function n64Opts(){ return N64PERF[prefs.n64perf] || N64PERF.max; }
+  function applyN64Perf(){
+    var g = gm(); if (!g || SYS !== "n64") return;
+    var o = n64Opts(); Object.keys(o).forEach(function(k){ try { g.setVariable(k, o[k]); } catch(e){} });
   }
   function frameskipSupported(){ return CORE === "mgba" || CORE === "desmume2015"; }
   function applyFF(){ try { E_().menuOptionChanged("ff-ratio", prefs.ff); } catch(e){} }
@@ -1196,6 +1208,7 @@
           toast(SYS === "nds" && CORE === "melonds"
             ? "El juego va lento. Prueba el motor Rápido (DeSmuME) en la pantalla de inicio."
             : frameskipSupported() ? "El juego va lento. En ☰ › Saltar fotogramas puedes elegir «Auto» o «1»."
+            : SYS === "n64" ? "El juego va lento. En ☰ › Rendimiento de N64 elige «Máximo»."
             : "Este juego exige mucho al móvil. Prueba a cerrar otras apps o a usar gráficos «Compatible».", 6000);
         }
       }
@@ -1248,6 +1261,8 @@
     paintSegV("dsSeg", prefs.dsMode);
     paintSegV("landSeg", prefs.landMode);
     paintSegV("dsLandSeg", prefs.dsLand);
+    paintSegV("n64Seg", prefs.n64perf);
+    el("n64Opts").style.display = SYS === "n64" ? "" : "none";
     paintSegV("fsSeg", prefs.frameskip || "off");
     el("fsOpts").style.display = frameskipSupported() ? "" : "none";
     var fa = document.querySelector('#fsSeg [data-v="auto"]'); if (fa) fa.style.display = CORE === "mgba" ? "" : "none";
@@ -1387,6 +1402,8 @@
     document.querySelectorAll("#filterSeg button").forEach(function(b){ b.onclick = function(){ prefs.filter = b.dataset.v; savePrefs(); applyFilter(); paintMenu(); }; });
     document.querySelectorAll("#dsLandSeg button").forEach(function(b){ b.onclick = function(){ prefs.dsLand = b.dataset.v; savePrefs(); hybridGeo = null; applyDsLayout(); layout(); paintMenu();
       if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
+    document.querySelectorAll("#n64Seg button").forEach(function(b){ b.onclick = function(){ prefs.n64perf = b.dataset.v; savePrefs(); applyN64Perf(); paintMenu();
+      toast("Guardado. Si no notas el cambio, sal del juego y vuelve a abrirlo.", 3500); }; });
     document.querySelectorAll("#fsSeg button").forEach(function(b){ b.onclick = function(){ prefs.frameskip = b.dataset.v; savePrefs(); applyFrameskip(); paintMenu(); }; });
     document.querySelectorAll("#landSeg button").forEach(function(b){ b.onclick = function(){ prefs.landMode = b.dataset.v; savePrefs(); layout(); paintMenu();
       if (!landscape) toast("Se verá al girar el móvil en horizontal"); }; });
